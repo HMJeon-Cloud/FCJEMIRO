@@ -653,6 +653,7 @@ function mockHandler(fn, a){
     if(cd.ownerId) DB.players.forEach(function(p){ if(p.id===cd.ownerId) p.role='임원'; });   // 팀 생성자는 임원
     return mockHandler('getClubs',[]);
   }
+  if(fn==='updateClub'){ DB.clubs.forEach(function(c){ if(c.id===a[0].id) Object.assign(c, {name:a[0].name, region:a[0].region, note:a[0].note, emblem:a[0].emblem}); }); return mockHandler('getClubs',[]); }
   if(fn==='deleteClub'){ DB.clubs=DB.clubs.filter(function(c){return c.id!==a[0];}); if(DB.clubs.length && !DB.clubs.some(function(c){return c.own;})) DB.clubs[0].own=true; return mockHandler('getClubs',[]); }
   // --- 추가 참석 신청 (extras) ---
   if(fn==='requestExtra'){
@@ -1563,12 +1564,13 @@ function viewMore(){
   + '<div class="eyebrow" style="margin-top:22px;">계정</div>'
   + '<div class="card" style="padding:4px 0;">'
   +   '<div class="list-row"><span class="nm" style="flex:1;">로그인 계정</span><span class="val" style="font-size:13.5px;color:var(--ink);">'+who+'</span></div>'
+  +   (isAdmin() && ownClub() ? '<div class="list-row" style="cursor:pointer;" onclick="openClubForm(\''+ownClub().id+'\')"><span class="nm" style="flex:1;">우리 팀 정보 수정</span><span class="val" style="color:var(--red);font-size:14px;">'+esc(ownClub().name)+' ›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="openMyPw()"><span class="nm" style="flex:1;">내 비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">변경 ›</span></div>'
   +   (isAdmin()?'<div class="list-row" style="cursor:pointer;" onclick="openRoleManage()"><span class="nm" style="flex:1;">권한 관리</span><span class="val" style="color:var(--red);font-size:14px;">임원/팀원 ›</span></div>':'')
   +   (isAdmin()?'<div class="list-row" style="cursor:pointer;" onclick="copyVenueLink(location.hostname)"><span class="nm" style="flex:1;">현재 도메인 <span style="font-size:10px;color:var(--steel-soft);">(카카오맵 등록용)</span></span><span class="val" style="font-size:11.5px;color:var(--steel);word-break:break-all;">'+esc(location.hostname)+'</span></div>':'')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">FC JEMIRO 운영 · v0.10</p>';
+  + '<p class="hint">FC JEMIRO 운영 · v0.11</p>';
 }
 function moreItem(id,title,sub,icon){
   return '<div class="player" style="margin-bottom:9px;" onclick="go(\''+id+'\')">'
@@ -2122,7 +2124,7 @@ function fallbackCopy_(text){
 }
 
 /* ================= 팀 (Clubs) ================= */
-var REGIONS = ['서울','경기','인천','부산','대구','광주','대전','울산','세종','강원','충북','충남','전북','전남','경북','경남','제주'];
+var REGIONS = ['서울','안산','수원','성남','용인','부천','안양','화성','김포','고양','남양주','평택','인천','부산','대구','대전','광주','울산','세종','강원','충북','충남','전북','전남','경북','경남','제주'];
 function ownClub(){ return (state.clubs||[]).filter(function(c){return c.own;})[0] || (state.clubs||[])[0] || null; }
 function applyClubHeader(){
   var c = ownClub(); if(!c) return;
@@ -2156,22 +2158,28 @@ function viewClub(){
     + '<p class="hint">첫 번째로 등록한 팀이 앱 상단에 표시되는 우리 팀이 됩니다.<br>팀을 만든 사람은 자동으로 임원(관리자)이 됩니다.</p>';
 }
 var clubEmblemData = '';
-function openClubForm(){
+function openClubForm(clubId){
   if(!state.auth){ toast('로그인이 필요합니다'); return; }
-  clubEmblemData = '';
-  var regOpts = '<option value="">지역 선택</option>' + REGIONS.map(function(r){ return '<option value="'+r+'">'+r+'</option>'; }).join('');
+  var c = clubId ? (state.clubs||[]).filter(function(x){return x.id===clubId;})[0] : null;
+  if(clubId && !isAdmin()){ toast('임원만 팀 정보를 수정할 수 있습니다'); return; }
+  state.editClubId = clubId || null;
+  clubEmblemData = c && c.emblem ? c.emblem : '';
+  var regList = REGIONS.slice();
+  if(c && c.region && regList.indexOf(c.region)<0) regList.unshift(c.region);
+  var regOpts = '<option value="">지역 선택</option>' + regList.map(function(r){ return '<option value="'+esc(r)+'"'+(c&&c.region===r?' selected':'')+'>'+esc(r)+'</option>'; }).join('');
+  var prev = clubEmblemData ? '<img src="'+clubEmblemData+'" style="width:100%;height:100%;object-fit:contain;border-radius:12px;">' : '🛡️';
   var html = '<div class="grabber"></div>'
-   + '<div class="sheet-head"><h3>팀 등록</h3><button class="x" onclick="closeSheet()">✕</button></div>'
+   + '<div class="sheet-head"><h3>'+(clubId?'팀 정보 수정':'팀 등록')+'</h3><button class="x" onclick="closeSheet()">✕</button></div>'
    + '<div class="sheet-body">'
    +   '<div class="field"><label>엠블럼</label>'
    +     '<div style="display:flex;align-items:center;gap:12px;">'
-   +       '<div id="cb_prev" class="club-emblem club-emblem-empty" style="width:56px;height:56px;">🛡️</div>'
+   +       '<div id="cb_prev" class="club-emblem'+(clubEmblemData?'':' club-emblem-empty')+'" style="width:56px;height:56px;">'+prev+'</div>'
    +       '<label class="btn-ghost" style="flex:1;margin:0;text-align:center;cursor:pointer;">이미지 선택<input id="cb_file" type="file" accept="image/*" style="display:none;" onchange="pickEmblem(this)"></label>'
    +     '</div></div>'
-   +   '<div class="field"><label>팀명<span class="req">*</span></label><input id="cb_name" type="text" placeholder="FC JEMIRO"></div>'
+   +   '<div class="field"><label>팀명<span class="req">*</span></label><input id="cb_name" type="text" value="'+(c?esc(c.name):'')+'"></div>'
    +   '<div class="field"><label>지역</label><select id="cb_region">'+regOpts+'</select></div>'
-   +   '<div class="field"><label>비고</label><input id="cb_note" type="text" placeholder="SINCE 2014 · 12TH SEASON"></div>'
-   +   '<button class="btn-primary" onclick="saveClub()">등록하기</button>'
+   +   '<div class="field"><label>비고</label><input id="cb_note" type="text" value="'+(c&&c.note?esc(c.note):'')+'"></div>'
+   +   '<button class="btn-primary" onclick="saveClub()">'+(clubId?'수정 완료':'등록하기')+'</button>'
    + '</div>';
   showSheet(html);
 }
@@ -2196,10 +2204,21 @@ function pickEmblem(input){
 function saveClub(){
   var name=(document.getElementById('cb_name')||{}).value||'';
   if(!name.trim()){ toast('팀명을 입력하세요'); return; }
-  var data={ name:name.trim(), region:(document.getElementById('cb_region')||{}).value||'', note:((document.getElementById('cb_note')||{}).value||'').trim(), emblem:clubEmblemData||'', ownerId:state.auth?state.auth.playerId:'' };
+  var data={ name:name.trim(), region:(document.getElementById('cb_region')||{}).value||'', note:((document.getElementById('cb_note')||{}).value||'').trim(), emblem:clubEmblemData||'' };
+  if(state.editClubId){
+    // 수정
+    var id=state.editClubId;
+    data.id=id;
+    state.clubs=(state.clubs||[]).map(function(c){ return c.id===id ? Object.assign({}, c, data) : c; });
+    state.editClubId=null;
+    closeSheet(); applyClubHeader(); render(); toast('팀 정보를 수정했습니다');
+    API.run('updateClub', data).then(function(list){ if(list){ state.clubs=list; applyClubHeader(); if(state.screen==='club'||state.screen==='more') render(); } }).catch(function(){ toast('저장 실패 · 새로고침'); });
+    return;
+  }
+  // 신규 등록
+  data.ownerId = state.auth?state.auth.playerId:'';
   var tmp=Object.assign({id:'tmp'+Date.now(), own:(state.clubs||[]).length===0, createdAt:new Date().toISOString()}, data);
   state.clubs=(state.clubs||[]).concat([tmp]);
-  // 팀 생성자는 임원으로 (요청 7)
   if(state.auth && state.auth.role!=='임원'){
     state.auth.role='임원'; saveSession(state.auth);
     state.players=(state.players||[]).map(function(p){ return p.id===state.auth.playerId ? Object.assign({},p,{role:'임원'}) : p; });
@@ -2923,7 +2942,7 @@ var WRITE_TOUCH = {
   setMatchStats:['stats'], setMatchAttendance:['attendance'],
   createPoll:['polls'], closePoll:['polls'], deletePoll:['polls','votes'], castVote:['votes'],
   addPost:['posts'], togglePin:['posts'], deletePost:['posts'],
-  addClub:['clubs','players'], deleteClub:['clubs'],
+  addClub:['clubs','players'], updateClub:['clubs'], deleteClub:['clubs'],
   requestExtra:['extras'], approveExtra:['extras','members','squads'], rejectExtra:['extras'],
   assignVotersToMatch:['members','squads']
 };
