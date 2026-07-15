@@ -366,6 +366,9 @@
   .cc-name{font-weight:800;font-size:15.5px;color:var(--ink);}
   .cc-name .rg{font-size:11.5px;font-weight:600;color:var(--steel-soft);margin-left:2px;}
   .cc-own{font-size:9.5px;font-weight:600;letter-spacing:.08em;background:linear-gradient(150deg,var(--red),var(--red-deep));color:#fff;border-radius:5px;padding:2px 6px;margin-left:5px;vertical-align:2px;}
+  .cc-cur{font-size:10px;font-weight:600;letter-spacing:.05em;background:linear-gradient(150deg,var(--red),var(--red-deep));color:#fff;border-radius:6px;padding:5px 9px;}
+  .cc-lock{font-size:11px;font-weight:600;color:var(--steel-soft);}
+  .club-card.on{border-color:var(--red);box-shadow:0 0 0 1.5px var(--red) inset, var(--shadow-sm);}
   .cc-note{font-size:12px;color:var(--steel);margin-top:3px;}
   .club-star{flex:0 0 auto;background:none;border:none;font-size:20px;line-height:1;color:var(--line-strong);cursor:pointer;padding:2px 2px;}
   .club-star.on{color:var(--gold);}
@@ -636,6 +639,11 @@ var FIREBASE_CONFIG = {
   appId: "1:655854550724:web:45b6c996c0c47cd0e9d391"
 };
 
+var APP_NAME = '우리동네 축구왕';
+var APP_SUB = 'KICKTOWN · 동네 축구 리그';
+var APP_LOGO = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjAgMTIwIj4KPGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjRDQyQTNFIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjOEUwRDI0Ii8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+CjxwYXRoIGQ9Ik02MCA4IEwxMDQgMjAgTDEwNCA2MiBDMTA0IDkwIDg0IDEwNiA2MCAxMTQgQzM2IDEwNiAxNiA5MCAxNiA2MiBMMTYgMjAgWiIgZmlsbD0idXJsKCNnKSIgc3Ryb2tlPSIjRTdCODRCIiBzdHJva2Utd2lkdGg9IjMuNSIvPgo8ZyBmaWxsPSIjRTdCODRCIj48cGF0aCBkPSJNNDAgNDIgTDQwIDMwIEw1MCAzOCBMNjAgMjYgTDcwIDM4IEw4MCAzMCBMODAgNDIgWiIvPjxjaXJjbGUgY3g9IjQwIiBjeT0iMjciIHI9IjIuNiIvPjxjaXJjbGUgY3g9IjYwIiBjeT0iMjMiIHI9IjIuNiIvPjxjaXJjbGUgY3g9IjgwIiBjeT0iMjciIHI9IjIuNiIvPjwvZz4KPGNpcmNsZSBjeD0iNjAiIGN5PSI3NCIgcj0iMjEiIGZpbGw9IiNGQkZCRjciLz4KPGcgZmlsbD0iIzE0MTQxNCI+PHBvbHlnb24gcG9pbnRzPSI2MCw2MyA2OCw2OSA2NSw3OSA1NSw3OSA1Miw2OSIvPjwvZz4KPGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMTQxNDE0IiBzdHJva2Utd2lkdGg9IjIuNCI+PHBhdGggZD0iTTYwIDYzIEw2MCA1NSIvPjxwYXRoIGQ9Ik02OCA2OSBMNzYgNjUiLz48cGF0aCBkPSJNNjUgNzkgTDcwIDg2Ii8+PHBhdGggZD0iTTU1IDc5IEw1MCA4NiIvPjxwYXRoIGQ9Ik01MiA2OSBMNDQgNjUiLz48L2c+CjxjaXJjbGUgY3g9IjYwIiBjeT0iNzQiIHI9IjIxIiBmaWxsPSJub25lIiBzdHJva2U9IiMxNDE0MTQiIHN0cm9rZS13aWR0aD0iMiIvPgo8L3N2Zz4=';
+var ACTIVE_CLUB = null;   // 현재 선택된 팀 id (팀별 데이터 스코프)
+
 var API = {
   run: function(fn){
     var args = Array.prototype.slice.call(arguments, 1);
@@ -648,16 +656,25 @@ var API = {
 };
 function mockHandler(fn, a){
   var id;
+  var AC = (typeof ACTIVE_CLUB!=='undefined' && ACTIVE_CLUB) ? ACTIVE_CLUB : null;
+  function inClub(x){ return !AC || x.clubId===AC; }
   // --- batch ---
-  if(fn==='bootstrap'){ return {config:mockHandler('getConfig',[]), players:mockHandler('getPlayers',[]), matches:mockHandler('getMatches',[]), clubs:mockHandler('getClubs',[])}; }
+  if(fn==='bootstrap'){ return {config:mockHandler('getConfig',[]), clubs:mockHandler('getClubs',[])}; }
   // --- clubs (팀) ---
   if(fn==='getClubs'){ return DB.clubs.slice().sort(function(a2,b2){ return (b2.own?1:0)-(a2.own?1:0) || (b2.fav?1:0)-(a2.fav?1:0) || String(a2.createdAt).localeCompare(String(b2.createdAt)); }); }
   if(fn==='addClub'){
     var cd=a[0];
-    var club={id:'c'+Date.now(), name:cd.name, region:cd.region||'', note:cd.note||'', emblem:cd.emblem||'', ownerId:cd.ownerId||'', own:DB.clubs.length===0, createdAt:new Date().toISOString()};
+    var cid='c'+Date.now();
+    var club={id:cid, name:cd.name, region:cd.region||'', note:cd.note||'', emblem:cd.emblem||'', own:false, createdAt:new Date().toISOString()};
     DB.clubs.push(club);
-    if(cd.ownerId) DB.players.forEach(function(p){ if(p.id===cd.ownerId) p.role='임원'; });   // 팀 생성자는 임원
-    return mockHandler('getClubs',[]);
+    var membership=null;
+    if(cd.owner && cd.owner.name){
+      var opid='m'+Date.now();
+      var existPw=(DB.players.filter(function(x){return x.name===cd.owner.name && x.pw;})[0]||{}).pw||'';
+      DB.players.push({id:opid, clubId:cid, name:cd.owner.name, num:cd.owner.num||1, size:cd.owner.size||'L', positions:cd.owner.positions||[], birth:cd.owner.birth||'', height:cd.owner.height||null, weight:cd.owner.weight||null, region:cd.owner.region||'', role:'임원', pw:existPw});
+      membership={clubId:cid, playerId:opid, role:'임원'};
+    }
+    return {clubs:mockHandler('getClubs',[]), membership:membership};
   }
   if(fn==='updateClub'){ DB.clubs.forEach(function(c){ if(c.id===a[0].id) Object.assign(c, {name:a[0].name, region:a[0].region, note:a[0].note, emblem:a[0].emblem}); }); return mockHandler('getClubs',[]); }
   if(fn==='toggleClubFav'){ DB.clubs.forEach(function(c){ if(c.id===a[0]) c.fav=!c.fav; }); return mockHandler('getClubs',[]); }
@@ -671,7 +688,7 @@ function mockHandler(fn, a){
   }
   if(fn==='approveExtra'){ // a: extraId, matchId|null, viewerId
     var ex=DB.extras.filter(function(x){return x.id===a[0];})[0];
-    if(ex){ ex.status='approved'; if(a[1]) addPlayerToMatchSquad_(a[1], ex.playerId); }
+    if(ex){ ex.status='approved'; if(a[1]) addPlayerToSquad_(a[1], ex.playerId); }
     return buildPollDetail_(ex?ex.pollId:'', a[2]);
   }
   if(fn==='rejectExtra'){
@@ -680,51 +697,43 @@ function mockHandler(fn, a){
     return buildPollDetail_(ex2?ex2.pollId:'', a[1]);
   }
   // --- 투표 인원 경기 편성 ---
-  if(fn==='assignVotersToMatch'){ // a: pollId, option, matchId
-    var vpids={}; DB.votes.filter(function(v){return v.pollId===a[0] && v.choice===a[1];}).forEach(function(v){ vpids[v.playerId]=1; });
-    var cnt=0; Object.keys(vpids).forEach(function(pl){ if(addPlayerToMatchSquad_(a[2], pl)) cnt++; });
-    return {ok:true, count:cnt};
+  // --- 독립 스쿼드 (포메이션 템플릿) ---
+  if(fn==='getSquads'){ return DB.squads.filter(inClub).slice().sort(function(x,y){return String(x.createdAt||'').localeCompare(String(y.createdAt||''));}).map(function(sq){ return {id:sq.id, name:sq.name, count:DB.members.filter(function(m){return m.squadId===sq.id;}).length}; }); }
+  if(fn==='renameSquad'){ DB.squads.forEach(function(sq){ if(sq.id===a[0]) sq.name=a[1]; }); return mockHandler('getSquads',[]); }
+  if(fn==='applyVotersToSquad'){ // a: pollId, option, squadId — 기존 배치 지우고 새로 채움
+    var sid=a[2]; DB.members=DB.members.filter(function(x){return x.squadId!==sid;});
+    var vp={}; DB.votes.filter(function(v){return v.pollId===a[0] && v.choice===a[1];}).forEach(function(v){ vp[v.playerId]=1; });
+    var cnt=0; Object.keys(vp).forEach(function(pl){ if(addPlayerToSquad_(sid,pl)) cnt++; });
+    return {ok:true, count:cnt, detail:buildSquadDetail_(sid)};
   }
-  if(fn==='getSquadScreen'){
-    var matches=mockHandler('getMatches',[]);
-    var mid=a[0]; if(!matches.some(function(m){return m.id===mid;})) mid=matches.length?matches[0].id:null;
-    var res={matches:matches, match:null, squads:[], currentSquadId:null, squadDetail:null};
-    if(!mid) return res;
-    var md=buildMatchDetail_(mid); res.match=md.match; res.squads=md.squads||[];
-    if(res.squads.length){ res.currentSquadId=res.squads[0].id; res.squadDetail=buildSquadDetail_(res.squads[0].id); }
-    return res;
+  if(fn==='loadAllToSquad'){ // a: squadId — 전체 팀원 불러오기(기존 지우고 채움)
+    var sid=a[0]; DB.members=DB.members.filter(function(x){return x.squadId!==sid;});
+    var cnt=0; DB.players.filter(inClub).slice().sort(function(x,y){return x.num-y.num;}).forEach(function(p){ if(addPlayerToSquad_(sid,p.id)) cnt++; });
+    return {ok:true, count:cnt, detail:buildSquadDetail_(sid)};
   }
   // --- players ---
-  if(fn==='getPlayers') return DB.players.slice().sort(function(x,y){return x.num-y.num;}).map(function(p){ var c={}; for(var k in p){ if(k!=='pw') c[k]=p[k]; } return c; });
-  if(fn==='addPlayer'){ a[0].id='m'+Date.now(); DB.players.push(a[0]); return mockHandler('getPlayers',[]); }
+  if(fn==='getPlayers') return DB.players.filter(inClub).slice().sort(function(x,y){return x.num-y.num;}).map(function(p){ var c={}; for(var k in p){ if(k!=='pw' && k!=='pwHash') c[k]=p[k]; } return c; });
+  if(fn==='addPlayer'){ a[0].id='m'+Date.now(); a[0].clubId=AC; if(!a[0].role) a[0].role='팀원'; DB.players.push(a[0]); return mockHandler('getPlayers',[]); }
   if(fn==='updatePlayer'){ DB.players.forEach(function(x){ if(x.id===a[0].id) Object.assign(x,a[0]); }); return mockHandler('getPlayers',[]); }
   if(fn==='deletePlayer'){ DB.players=DB.players.filter(function(x){return x.id!==a[0];}); DB.members=DB.members.filter(function(x){return x.playerId!==a[0];}); return mockHandler('getPlayers',[]); }
   // --- matches ---
-  if(fn==='getMatches') return DB.matches.slice().sort(function(x,y){return (y.date+y.time).localeCompare(x.date+x.time);});
-  if(fn==='addMatch'){ a[0].id='g'+Date.now(); DB.matches.push(a[0]); return mockHandler('getMatches',[]); }
+  if(fn==='getMatches') return DB.matches.filter(inClub).slice().sort(function(x,y){return (y.date+y.time).localeCompare(x.date+x.time);});
+  if(fn==='addMatch'){ a[0].id='g'+Date.now(); a[0].clubId=AC; DB.matches.push(a[0]); return mockHandler('getMatches',[]); }
   if(fn==='updateMatch'){ DB.matches.forEach(function(x){ if(x.id===a[0].id) Object.assign(x,a[0]); }); return mockHandler('getMatches',[]); }
-  if(fn==='deleteMatch'){ id=a[0]; var sids=DB.squads.filter(function(s){return s.matchId===id;}).map(function(s){return s.id;});
-    DB.matches=DB.matches.filter(function(x){return x.id!==id;});
-    DB.squads=DB.squads.filter(function(s){return s.matchId!==id;});
-    DB.members=DB.members.filter(function(x){return sids.indexOf(x.squadId)<0;});
-    DB.notes=DB.notes.filter(function(x){return sids.indexOf(x.squadId)<0;});
-    return mockHandler('getMatches',[]); }
+  if(fn==='deleteMatch'){ id=a[0]; DB.matches=DB.matches.filter(function(x){return x.id!==id;}); return mockHandler('getMatches',[]); }
   // --- match squads (쿼터 목록) ---
   if(fn==='getMatchDetail'){ return buildMatchDetail_(a[0]); }
   if(fn==='createSquad'){
-    var mid=a[0]; var cur=DB.squads.filter(function(s){return s.matchId===mid;});
-    if(cur.length>=MAX_QUARTERS) throw new Error('쿼터는 최대 '+MAX_QUARTERS+'개까지 가능합니다');
-    DB.squads.push({id:'s'+Date.now(), matchId:mid, name:(cur.length+1)+'쿼터'});
-    return buildMatchDetail_(mid);
+    var sid='s'+Date.now()+Math.floor(Math.random()*99);
+    DB.squads.push({id:sid, clubId:AC, name:(a[0]||'새 스쿼드'), createdAt:new Date().toISOString()});
+    return {squads:mockHandler('getSquads',[]), squadId:sid, detail:buildSquadDetail_(sid)};
   }
   if(fn==='deleteSquad'){
-    var sid=a[0]; var sq=DB.squads.filter(function(s){return s.id===sid;})[0]; var mid2=sq?sq.matchId:null;
+    var sid=a[0];
     DB.squads=DB.squads.filter(function(s){return s.id!==sid;});
     DB.members=DB.members.filter(function(x){return x.squadId!==sid;});
     DB.notes=DB.notes.filter(function(x){return x.squadId!==sid;});
-    // 쿼터 번호 재정렬
-    DB.squads.filter(function(s){return s.matchId===mid2;}).forEach(function(s,i){ s.name=(i+1)+'쿼터'; });
-    return buildMatchDetail_(mid2);
+    return mockHandler('getSquads',[]);
   }
   // --- squad detail (쿼터별 명단 + 노트) ---
   if(fn==='getSquadDetail'){ return buildSquadDetail_(a[0]); }
@@ -747,10 +756,12 @@ function mockHandler(fn, a){
   if(fn==='deleteNote'){ var nid=a[0]; var sid3=(DB.notes.filter(function(x){return x.id===nid;})[0]||{}).squadId; DB.notes=DB.notes.filter(function(x){return x.id!==nid;}); return buildSquadDetail_(sid3); }
   // --- records ---
   if(fn==='getRecordBundle'){
+    var cms = DB.matches.filter(inClub);
+    var mids={}; cms.forEach(function(m){ mids[m.id]=1; });
     return {
-      matches: DB.matches.slice().sort(function(x,y){return (y.date).localeCompare(x.date);}),
-      stats: DB.stats.slice(),
-      attendance: DB.attendance.slice()
+      matches: cms.slice().sort(function(x,y){return (y.date).localeCompare(x.date);}),
+      stats: DB.stats.filter(function(s){return mids[s.matchId];}).slice(),
+      attendance: DB.attendance.filter(function(x){return mids[x.matchId];}).slice()
     };
   }
   if(fn==='recordMatchResult'){
@@ -776,14 +787,14 @@ function mockHandler(fn, a){
   // --- match full report (상대 전적 상세) ---
   if(fn==='getMatchReport'){ return buildMatchReport_(a[0]); }
   // --- polls ---
-  if(fn==='getPolls'){ return DB.polls.slice().sort(function(x,y){return String(y.createdAt).localeCompare(String(x.createdAt));}).map(function(p){
+  if(fn==='getPolls'){ return DB.polls.filter(inClub).slice().sort(function(x,y){return String(y.createdAt).localeCompare(String(x.createdAt));}).map(function(p){
     var voters={}; DB.votes.filter(function(v){return v.pollId===p.id;}).forEach(function(v){ voters[v.playerId]=1; });
-    return {id:p.id, title:p.title, options:p.options.slice(), startAt:p.startAt, endAt:p.endAt, status:pollStatus_(p), multi:!!p.multi, anon:!!p.anon, voteCount:Object.keys(voters).length, totalMembers:DB.players.length};
+    return {id:p.id, title:p.title, options:p.options.slice(), startAt:p.startAt, endAt:p.endAt, status:pollStatus_(p), multi:!!p.multi, anon:!!p.anon, voteCount:Object.keys(voters).length, totalMembers:DB.players.filter(inClub).length};
   }); }
   if(fn==='getPollDetail'){ return buildPollDetail_(a[0], a[1]); }
   if(fn==='createPoll'){
     var d=a[0];
-    DB.polls.push({id:'v'+Date.now(), title:d.title, options:d.options.slice(), startAt:d.startAt||'', endAt:d.endAt||'', status:'', multi:!!d.multi, anon:!!d.anon, createdAt:new Date().toISOString()});
+    DB.polls.push({id:'v'+Date.now(), clubId:AC, title:d.title, options:d.options.slice(), startAt:d.startAt||'', endAt:d.endAt||'', status:'', multi:!!d.multi, anon:!!d.anon, createdAt:new Date().toISOString()});
     return mockHandler('getPolls',[]);
   }
   if(fn==='castVote'){
@@ -798,27 +809,31 @@ function mockHandler(fn, a){
   if(fn==='deletePoll'){ DB.polls=DB.polls.filter(function(p){return p.id!==a[0];}); DB.votes=DB.votes.filter(function(v){return v.pollId!==a[0];}); return mockHandler('getPolls',[]); }
   // --- auth (사용자별 비밀번호/권한) ---
   if(fn==='login'){
-    var pid6=a[0], pw=a[1];
-    var pp=DB.players.filter(function(x){return x.id===pid6;})[0];
-    if(!pp) return {ok:false, error:'선수를 찾을 수 없습니다'};
-    var expected = pp.pw || 'jemiro';   // 개인 비번 미설정 시 초기 비번
+    var lname=a[0], pw=a[1];
+    var mates=DB.players.filter(function(x){return x.name===lname;});
+    if(!mates.length) return {ok:false, error:'선수를 찾을 수 없습니다'};
+    var withPw=mates.filter(function(x){return x.pw;})[0];
+    var expected = withPw ? withPw.pw : 'jemiro';
     if(pw!==expected) return {ok:false, error:'비밀번호가 올바르지 않습니다'};
-    return {ok:true, playerId:pp.id, name:pp.name, role:(pp.role==='임원'?'임원':'팀원'), firstLogin:!pp.pw, token:'mock.'+pp.id};
+    var memberships=mates.map(function(x){ return {clubId:x.clubId||null, playerId:x.id, role:(x.role==='임원'?'임원':'팀원')}; });
+    return {ok:true, name:lname, memberships:memberships, firstLogin:!withPw, token:'mock.'+lname};
   }
   if(fn==='setMyPassword'){ // a: playerId, oldPw, newPw
     var pu=DB.players.filter(function(x){return x.id===a[0];})[0];
     if(!pu) return {ok:false, error:'선수를 찾을 수 없습니다'};
-    var exp=(pu.pw||'jemiro');
+    var withPw=DB.players.filter(function(x){return x.name===pu.name && x.pw;})[0];
+    var exp=withPw?withPw.pw:'jemiro';
     if(a[1]!==exp) return {ok:false, error:'현재 비밀번호가 올바르지 않습니다'};
-    pu.pw=a[2]; return {ok:true};
+    DB.players.forEach(function(x){ if(x.name===pu.name) x.pw=a[2]; });   // 모든 소속팀 동일 비번
+    return {ok:true};
   }
   if(fn==='setMemberRole'){ DB.players.forEach(function(x){ if(x.id===a[0]) x.role=(a[1]==='임원'?'임원':'팀원'); }); return mockHandler('getPlayers',[]); }
-  if(fn==='resetMemberPassword'){ DB.players.forEach(function(x){ if(x.id===a[0]) x.pw=''; }); return {ok:true}; }
+  if(fn==='resetMemberPassword'){ var rt=DB.players.filter(function(x){return x.id===a[0];})[0]; if(rt) DB.players.forEach(function(x){ if(x.name===rt.name) x.pw=''; }); return {ok:true}; }
   // --- board (posts) ---
-  if(fn==='getPosts'){ return DB.posts.slice().map(function(p){ return JSON.parse(JSON.stringify(p)); }); }
+  if(fn==='getPosts'){ return DB.posts.filter(inClub).slice().map(function(p){ return JSON.parse(JSON.stringify(p)); }); }
   if(fn==='addPost'){
     var d=a[0];
-    DB.posts.push({id:'po'+Date.now(), type:d.type, title:d.title, body:d.body, author:d.author||'', authorId:d.authorId||'', pinned:!!d.pinned, createdAt:new Date().toISOString()});
+    DB.posts.push({id:'po'+Date.now(), clubId:AC, type:d.type, title:d.title, body:d.body, author:d.author||'', authorId:d.authorId||'', pinned:!!d.pinned, createdAt:new Date().toISOString()});
     return mockHandler('getPosts',[]);
   }
   if(fn==='togglePin'){ DB.posts.forEach(function(p){ if(p.id===a[0]) p.pinned=!p.pinned; }); return mockHandler('getPosts',[]); }
@@ -843,11 +858,8 @@ function pollStatus_(p){
   if(p.startAt && new Date(p.startAt) > now) return 'scheduled';
   return 'open';
 }
-/* 경기의 1번째 쿼터에 선수 편성 (선호 포지션 1순위, 없으면 DF). 이미 편성돼 있으면 건너뜀 */
-function addPlayerToMatchSquad_(matchId, playerId){
-  var sqs = DB.squads.filter(function(s){return s.matchId===matchId;});
-  if(!sqs.length){ DB.squads.push({id:'s'+Date.now()+Math.floor(Math.random()*999), matchId:matchId, name:'1쿼터'}); sqs=DB.squads.filter(function(s){return s.matchId===matchId;}); }
-  var sid = sqs[0].id;
+/* 스쿼드에 선수 편성 (선호 포지션 1순위, 없으면 DF). 이미 있으면 건너뜀 */
+function addPlayerToSquad_(sid, playerId){
   if(DB.members.some(function(x){return x.squadId===sid && x.playerId===playerId;})) return false;
   var pl = DB.players.filter(function(p){return p.id===playerId;})[0];
   var pos = (pl && pl.positions && pl.positions.length) ? pl.positions[0] : 'DF';
@@ -981,7 +993,7 @@ function loadSquadDetail(squadId){
     state.loadingSquad = false; render();
     API.run('getSquadDetail', squadId).then(function(d){
       SQUAD_CACHE[squadId]=d;
-      if(state.currentSquadId===squadId){ state.squadDetail=d; if(state.screen==='squad') render(); }
+      if(state.currentSquadId===squadId){ state.squadDetail=d; if(state.screen==='form') render(); }
     }).catch(function(){});
     return Promise.resolve();
   }
@@ -1044,6 +1056,7 @@ var TABS = [
   {id:'club',  kr:'팀',       en:'CLUBS',    label:'팀',    icon:'M12 3l7 3v5c0 5-3.5 8.5-7 10-3.5-1.5-7-5-7-10V6l7-3z'},
   {id:'team',  kr:'팀원 관리', en:'SQUAD',    label:'팀원',  icon:'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14c-4 0-7 2-7 5v1h14v-1c0-3-3-5-7-5z'},
   {id:'squad', kr:'경기 등록', en:'MATCHDAY', label:'경기등록', icon:'M4 5h16M4 5v14M4 5l6 5-6 5M20 5v14M12 5v14'},
+  {id:'form',  kr:'스쿼드',    en:'FORMATION', label:'스쿼드', icon:'M12 3l2.5 5 5.5.8-4 3.9 1 5.5L12 21l-5-2.9 1-5.5-4-3.9 5.5-.8z'},
   {id:'record',kr:'기록 관리', en:'STATS',    label:'기록',  icon:'M5 20V10M12 20V4M19 20v-7'},
   {id:'att',   kr:'출석 관리', en:'ATTENDANCE',label:'출석', icon:'M12 21s-7-5-7-11a7 7 0 1114 0c0 6-7 11-7 11zM12 8a2 2 0 100 4 2 2 0 000-4z'},
   {id:'more',  kr:'더보기',    en:'MORE',     label:'더보기', icon:'M4 6h16M4 12h16M4 18h16'}
@@ -1059,8 +1072,12 @@ function renderTabs(){
 }
 
 function go(id){
+  // 팀 미선택 상태에서 팀 종속 탭 접근 차단
+  var teamTabs={team:1,squad:1,form:1,record:1,att:1,more:1};
+  if(teamTabs[id] && !state.activeClubId){ toast('먼저 팀을 선택하세요'); state.screen='club'; applyHeaderFor('club'); render(); return; }
   state.screen = id;
-  if(id==='squad' && !state.squadLoaded){ state.squadLoaded = true; loadSquad(); return; }
+  applyHeaderFor(id);
+  if(id==='form'){ loadForms(); return; }
   if(id==='record' && !state.recLoaded){ state.recLoaded = true; loadRecord(); return; }
   if(id==='poll' && !state.pollLoaded){ state.pollLoaded = true; loadPolls(); return; }
   if(id==='board' && !state.boardLoaded){ state.boardLoaded = true; loadBoard(); return; }
@@ -1079,6 +1096,7 @@ function render(){
   if(state.screen==='club')   c.innerHTML = viewClub();
   else if(state.screen==='team')   c.innerHTML = viewTeam();
   else if(state.screen==='squad') c.innerHTML = viewSquad();
+  else if(state.screen==='form') c.innerHTML = viewForm();
   else if(state.screen==='record') c.innerHTML = viewRecord();
   else if(state.screen==='att') c.innerHTML = viewAtt();
   else if(state.screen==='more') c.innerHTML = viewMore();
@@ -1087,7 +1105,7 @@ function render(){
   else if(state.screen==='poll') c.innerHTML = viewPoll();
   c.scrollTop = 0;
   renderTabs();
-  if(state.screen==='squad') initPitchDrag();
+  if(state.screen==='form') initPitchDrag();
 }
 
 function initPitchDrag(){
@@ -1189,77 +1207,131 @@ function fmtDateDot(dateStr){
   return String(dateStr).slice(0,10).replace(/-/g,'.');
 }
 function viewSquad(){
-  if(state.loadingSquad) return '<div class="empty"><div class="ei">📋</div>불러오는 중...</div>';
-
   var addBtn = isAdmin() ? '<button class="btn-add-match" onclick="openMatchForm()">＋ 새 경기 등록</button>' : '';
-
-  var chips = state.matches.map(function(m){
-    return '<div class="chip '+(m.id===state.squadMatchId?'on':'')+'" onclick="selectMatch(\''+m.id+'\')">'+fmtMatchDate(m.date)+'</div>';
-  }).join('');
-
   if(!state.matches.length){
-    return addBtn
-      + '<div class="empty"><div class="ei">📋</div>등록된 경기가 없습니다.<br>위 버튼으로 첫 경기를 등록하세요.</div>';
+    return addBtn + '<div class="empty"><div class="ei">📋</div>등록된 경기가 없습니다.<br>위 버튼으로 첫 경기를 등록하세요.</div>';
   }
+  var cards = state.matches.slice().sort(function(a,b){ return b.date.localeCompare(a.date); }).map(function(m){
+    var venueBtn = (m.venueUrl || (m.lat!=null&&m.lat!==''))
+      ? '<button class="btn-ghost" style="margin:10px 0 0;" onclick="event.stopPropagation();openVenueShare(\''+m.id+'\')">🗺️ 경기장 지도 · 내비 · 공유</button>' : '';
+    var edit = isAdmin() ? ' onclick="openMatchForm(\''+m.id+'\')" style="cursor:pointer;"' : '';
+    var cn = (activeClub()&&activeClub().name) ? esc(activeClub().name) : 'FC JEMIRO';
+    return '<div class="match" style="margin-bottom:12px;"'+edit+'>'
+      + '<div class="match-top"><span>'+fmtDateDot(m.date)+(cleanTime(m.time)?' '+cleanTime(m.time):'')+'</span><span>'+(m.venue||'장소 미정')+'</span></div>'
+      + '<div class="match-mid"><div class="team-side"><span class="cn">'+cn+'</span></div>'
+      + '<div class="oswald" style="font-size:15px;color:var(--steel-soft);">VS</div>'
+      + '<div class="team-side"><span class="cn">'+(m.opponent||'상대 미정')+'</span></div></div>'
+      + venueBtn
+      + '</div>';
+  }).join('');
+  return addBtn + '<div class="eyebrow" style="margin-top:14px;">등록된 경기 · '+state.matches.length+'</div>' + cards
+    + '<p class="hint">'+(isAdmin()?'경기를 탭하면 수정할 수 있습니다.<br>':'')+'스쿼드(포메이션) 작성은 스쿼드 탭에서 관리합니다.</p>';
+}
 
-  var m = state.currentMatch;
-  var top = addBtn + '<div class="chips" style="margin-top:12px;">'+chips+'</div>';
-  if(!m){ return top+'<div class="empty">경기를 선택하세요.</div>'; }
-
-  // match header card (탭하면 경기 수정, 임원)
-  var header = '<div class="match" style="margin-bottom:10px;" onclick="openMatchForm(\''+m.id+'\')">'
-    + '<div class="match-top"><span>'+fmtDateDot(m.date)+(cleanTime(m.time)?' '+cleanTime(m.time):'')+'</span><span>'+(m.venue||'장소 미정')+'</span></div>'
-    + '<div class="match-mid"><div class="team-side"><span class="cn">FC JEMIRO</span></div>'
-    + '<div class="oswald" style="font-size:15px;color:var(--steel-soft);">VS</div>'
-    + '<div class="team-side"><span class="cn">'+(m.opponent||'상대 미정')+'</span></div></div></div>'
-    + ((m.venueUrl || (m.lat!=null&&m.lat!==''))
-        ? '<button class="btn-ghost" style="margin:0 0 14px;" onclick="openVenueShare(\''+m.id+'\')">🗺️ 경기장 지도 · 내비 · 공유</button>'
-        : '');
-
-  // quarter tabs (경기당 최대 4개)
-  var qtabs = '<div class="qtabs">';
-  state.matchSquads.forEach(function(s){
-    qtabs += '<button class="qtab '+(s.id===state.currentSquadId?'on':'')+'" onclick="selectQuarter(\''+s.id+'\')">'+s.name+'</button>';
-  });
-  if(state.matchSquads.length < MAX_QUARTERS){
-    if(isAdmin()) qtabs += '<button class="qtab add" onclick="addQuarter()">＋</button>';
+/* ================= 스쿼드 (독립) ================= */
+function loadForms(){
+  state.loadingSquad = true; render();
+  API.run('getSquads').then(function(list){
+    state.squadList = list || [];
+    if(state.squadList.length){
+      if(!state.currentSquadId || !state.squadList.some(function(s){return s.id===state.currentSquadId;})) state.currentSquadId = state.squadList[0].id;
+      loadSquadDetail(state.currentSquadId);
+    } else {
+      state.currentSquadId=null; state.squadDetail=null; state.loadingSquad=false; render();
+    }
+  }).catch(function(){ state.loadingSquad=false; render(); toast('스쿼드를 불러오지 못했습니다'); });
+}
+function selectFormSquad(id){
+  state.currentSquadId = id;
+  if(SQUAD_CACHE[id]){ state.squadDetail = SQUAD_CACHE[id]; render(); }
+  loadSquadDetail(id);
+}
+function viewForm(){
+  if(state.loadingSquad && !state.squadList) return '<div class="empty"><div class="ei">📋</div>불러오는 중...</div>';
+  var addBtn = isAdmin() ? '<button class="btn-add-match" onclick="openSquadForm()">＋ 새 스쿼드</button>' : '';
+  var list = state.squadList || [];
+  if(!list.length){
+    return addBtn + '<div class="empty"><div class="ei">📋</div>작성된 스쿼드가 없습니다.'+(isAdmin()?'<br>＋ 새 스쿼드로 포메이션을 만들어보세요.':'')+'</div>';
   }
-  qtabs += '</div>';
+  var tabs = '<div class="qtabs" style="flex-wrap:wrap;">' + list.map(function(s){
+    return '<button class="qtab '+(s.id===state.currentSquadId?'on':'')+'" onclick="selectFormSquad(\''+s.id+'\')">'+esc(s.name)+(s.count?' · '+s.count:'')+'</button>';
+  }).join('') + '</div>';
 
   var d = state.squadDetail;
-  if(!d || !d.squad){ return '<div class="chips">'+chips+'</div>'+header+qtabs+'<div class="empty">쿼터를 선택하세요.</div>'; }
+  if(!d || !d.squad){ return addBtn + tabs + '<div class="empty">스쿼드를 선택하세요.</div>'; }
 
-  // 경기장 배치도 (드래그로 위치 자유 이동)
+  var applyBtns = isAdmin() ? '<div style="display:flex;gap:9px;margin-bottom:12px;">'
+    + '<button class="btn-ghost" style="flex:1;margin:0;" onclick="openApplyVoters(\''+d.squad.id+'\')">🗳️ 투표 인원 적용</button>'
+    + '<button class="btn-ghost" style="flex:1;margin:0;" onclick="loadAllToSquadGo(\''+d.squad.id+'\')">👥 전체 팀원 불러오기</button>'
+    + '</div>' : '';
+
   var tokens = d.members.map(function(mem){
     return '<div class="token pos-'+mem.position+'" data-pid="'+mem.playerId+'" style="left:'+(mem.x*100)+'%;top:'+(mem.y*100)+'%;">'
       + '<span class="t-num oswald">'+mem.num+'</span><span class="t-name">'+esc(mem.name)+'</span></div>';
   }).join('');
-  var roster = '<div class="section"><div class="eyebrow" style="display:flex;justify-content:space-between;">'
-    + '<span style="display:flex;align-items:center;gap:8px;">'+d.squad.name+' 배치도 · '+d.members.length+'명</span>'
-    + ((isAdmin()&&state.matchSquads.length>1) ? '<span style="cursor:pointer;color:var(--steel-soft);font-size:11px;letter-spacing:0;" onclick="openQuarterMenu()">쿼터 삭제</span>' : '')
-    + '</div>'
-    + '<div class="pitch" id="pitch">'
+
+  var head = '<div class="eyebrow" style="display:flex;justify-content:space-between;align-items:center;">'
+    + '<span>'+esc(d.squad.name)+' · '+d.members.length+'명</span>'
+    + (isAdmin()?'<span style="font-size:11px;letter-spacing:0;">'
+        + '<a style="color:var(--steel-soft);cursor:pointer;" onclick="openSquadForm(\''+d.squad.id+'\')">이름수정</a>'
+        + ' · <a style="color:var(--red);cursor:pointer;" onclick="deleteSquadConfirm(\''+d.squad.id+'\',\''+esc(d.squad.name).replace(/'/g,'')+'\')">삭제</a></span>':'')
+    + '</div>';
+
+  var pitch = '<div class="pitch" id="pitch">'
     + '<svg class="pitch-lines" viewBox="0 0 100 132" preserveAspectRatio="none">'
     +   '<g fill="none" stroke="rgba(255,255,255,0.5)" stroke-width="0.7">'
-    +   '<rect x="2" y="2" width="96" height="128" rx="1"/>'
-    +   '<line x1="2" y1="66" x2="98" y2="66"/>'
-    +   '<circle cx="50" cy="66" r="12"/>'
-    +   '<rect x="28" y="2" width="44" height="15"/>'
-    +   '<rect x="40" y="2" width="20" height="6"/>'
-    +   '<rect x="28" y="115" width="44" height="15"/>'
-    +   '<rect x="40" y="124" width="20" height="6"/>'
-    +   '</g><circle cx="50" cy="66" r="1" fill="rgba(255,255,255,0.6)"/>'
-    + '</svg>'
-    + '<div class="pitch-label">우리 진영 ↓</div>'
-    + tokens + '</div>'
-    + (isAdmin()?'<button class="btn-ghost" style="margin-top:10px;" onclick="openMemberPicker()">＋ 선수 편성 · 포지션</button>':'')+'</div>';
+    +   '<rect x="2" y="2" width="96" height="128" rx="1"/><line x1="2" y1="66" x2="98" y2="66"/><circle cx="50" cy="66" r="12"/>'
+    +   '<rect x="28" y="2" width="44" height="15"/><rect x="40" y="2" width="20" height="6"/>'
+    +   '<rect x="28" y="115" width="44" height="15"/><rect x="40" y="124" width="20" height="6"/>'
+    +   '</g><circle cx="50" cy="66" r="1" fill="rgba(255,255,255,0.6)"/></svg>'
+    + '<div class="pitch-label">우리 진영 ↓</div>' + tokens + '</div>'
+    + (isAdmin()?'<button class="btn-ghost" style="margin-top:10px;" onclick="openMemberPicker()">＋ 선수 편성 · 포지션</button>':'');
 
-  // notes (쿼터별)
-  roster += noteSection('pre','경기 전 요청사항', d.notes);
-  roster += noteSection('post','경기 후 피드백', d.notes);
-
-  return top + header + qtabs + roster
-    + '<p class="hint">선수를 끌어 원하는 위치에 배치하세요. 쿼터별로 배치·요청사항·피드백이 독립입니다. (최대 '+MAX_QUARTERS+'쿼터)</p>';
+  return addBtn + tabs + applyBtns + '<div class="section">' + head + pitch + '</div>'
+    + '<p class="hint">'+(isAdmin()?'선수를 끌어 원하는 위치에 배치하세요.<br>「투표 인원 적용」은 참석 투표자를, 「전체 팀원 불러오기」는 모든 팀원을 이 스쿼드에 채웁니다(기존 배치는 지워집니다).':'스쿼드 포메이션입니다.')+'</p>';
+}
+function openSquadForm(id){
+  if(!requireAdmin()) return;
+  var cur = id ? ((state.squadList||[]).filter(function(s){return s.id===id;})[0]||{}) : {};
+  var html = '<div class="grabber"></div>'
+   + '<div class="sheet-head"><h3>'+(id?'스쿼드 이름 수정':'새 스쿼드')+'</h3><button class="x" onclick="closeSheet()">✕</button></div>'
+   + '<div class="sheet-body">'
+   +   '<div class="field"><label>스쿼드 이름<span class="req">*</span></label><input id="sq_name" type="text" value="'+(cur.name?esc(cur.name):'')+'" placeholder="예: 442 기본형 / 433 공격형"></div>'
+   +   '<button class="btn-primary" onclick="saveSquadName(\''+(id||'')+'\')">'+(id?'수정':'만들기')+'</button>'
+   + '</div>';
+  showSheet(html);
+}
+function saveSquadName(id){
+  var name=((document.getElementById('sq_name')||{}).value||'').trim();
+  if(!name){ toast('이름을 입력하세요'); return; }
+  if(id){
+    state.squadList=(state.squadList||[]).map(function(s){ return s.id===id?Object.assign({},s,{name:name}):s; });
+    if(state.squadDetail && state.squadDetail.squad && state.squadDetail.squad.id===id){ state.squadDetail.squad.name=name; cacheSquad_(state.squadDetail); }
+    closeSheet(); render();
+    API.run('renameSquad', id, name).then(function(list){ if(list){ state.squadList=list; render(); } }).catch(function(){ toast('저장 실패 · 새로고침'); });
+  } else {
+    closeSheet(); toast('스쿼드를 만드는 중...');
+    API.run('createSquad', name).then(function(res){
+      if(res && res.squads){ state.squadList=res.squads; state.currentSquadId=res.squadId; if(res.detail){ SQUAD_CACHE[res.squadId]=res.detail; state.squadDetail=res.detail; } render(); }
+    }).catch(function(){ toast('생성 실패 · 새로고침'); });
+  }
+}
+function deleteSquadConfirm(id, name){
+  if(!requireAdmin()) return;
+  state.squadList=(state.squadList||[]).filter(function(s){return s.id!==id;});
+  delete SQUAD_CACHE[id];
+  if(state.currentSquadId===id){ state.currentSquadId = state.squadList.length?state.squadList[0].id:null; state.squadDetail = state.currentSquadId?SQUAD_CACHE[state.currentSquadId]:null; }
+  render(); toast(name+' 스쿼드를 삭제했습니다');
+  API.run('deleteSquad', id).then(function(list){ if(list){ state.squadList=list; if(state.currentSquadId && !SQUAD_CACHE[state.currentSquadId]) loadSquadDetail(state.currentSquadId); } }).catch(function(){ toast('삭제 저장 실패 · 새로고침'); });
+}
+function loadAllToSquadGo(sid){
+  if(!requireAdmin()) return;
+  API.run('loadAllToSquad', sid).then(function(res){
+    if(res && res.detail){ SQUAD_CACHE[sid]=res.detail; state.squadDetail=res.detail; }
+    // update count in list
+    state.squadList=(state.squadList||[]).map(function(s){ return s.id===sid?Object.assign({},s,{count:res.detail?res.detail.members.length:s.count}):s; });
+    render(); toast((res&&res.count||0)+'명을 불러왔습니다');
+  }).catch(function(){ toast('불러오기 실패'); });
 }
 function posGroup(en,kr,arr){
   var chips = arr.length
@@ -1577,7 +1649,7 @@ function viewMore(){
   +   (isAdmin()?'<div class="list-row" style="cursor:pointer;" onclick="copyVenueLink(location.hostname)"><span class="nm" style="flex:1;">현재 도메인 <span style="font-size:10px;color:var(--steel-soft);">(카카오맵 등록용)</span></span><span class="val" style="font-size:11.5px;color:var(--steel);word-break:break-all;">'+esc(location.hostname)+'</span></div>':'')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">FC JEMIRO 운영 · v0.12</p>';
+  + '<p class="hint">우리동네 축구왕 · v0.15</p>';
 }
 function moreItem(id,title,sub,icon){
   return '<div class="player" style="margin-bottom:9px;" onclick="go(\''+id+'\')">'
@@ -1880,7 +1952,7 @@ function renderPollDetail(d){
   }
   // 투표 인원 경기 편성 (요청 1, 임원)
   var assignBtn = (isAdmin() && d.totalVotes>0)
-    ? '<button class="btn-ghost" style="margin-top:14px;" onclick="openAssignVoters(\''+p.id+'\')">⚽ 투표 인원 경기에 편성</button>'
+    ? '<button class="btn-ghost" style="margin-top:14px;" onclick="openApplyToSquad(\''+p.id+'\')">⚽ 투표 인원 스쿼드 적용</button>'
     : '';
 
   var adminBtns = isAdmin() ? '<div style="display:flex;gap:9px;margin-top:14px;">'
@@ -1913,43 +1985,76 @@ function pickVoteOpt(btn, multi){
   }
 }
 /* ---- 투표 인원 경기 편성 (요청 1) ---- */
-var assignPollId=null, assignOpt=null, assignMatchId=null;
-function openAssignVoters(pollId){
+var assignPollId=null, assignOpt=null, applyTargetSquad=null;
+/* 스쿼드 탭에서: 스쿼드 고정 → 투표+항목 선택 */
+function openApplyVoters(sid){
   if(!requireAdmin()) return;
-  assignPollId=pollId; assignOpt=null; assignMatchId=null;
-  API.run('getPollDetail', pollId, authId()).then(function(d){
-    if(!d||!d.poll){ toast('투표를 찾을 수 없습니다'); return; }
-    var opts=d.results.map(function(r){
-      return '<div class="chip" data-as-opt="'+esc(r.option).replace(/"/g,'')+'" onclick="pickAssignOpt(this)">'+esc(r.option)+' ('+r.count+'명)</div>';
-    }).join('');
-    var today=new Date().toISOString().slice(0,10);
-    var ms=(state.matches||[]).slice().sort(function(a,b){return a.date.localeCompare(b.date);});
-    var up=ms.filter(function(m){return m.date>=today;});
-    var list=(up.length?up:ms).slice(0,10);
-    var mopts=list.map(function(m){ return '<option value="'+m.id+'">'+fmtDateDot(m.date)+' vs '+esc(m.opponent||'상대 미정')+'</option>'; }).join('');
+  applyTargetSquad=sid; assignPollId=null; assignOpt=null;
+  API.run('getPolls').then(function(polls){
+    state.polls=polls||[];
+    if(!polls || !polls.length){ toast('작성된 투표가 없습니다'); return; }
+    var popts='<option value="">투표 선택</option>'+polls.map(function(p){ return '<option value="'+p.id+'">'+esc(p.title)+'</option>'; }).join('');
     var html='<div class="grabber"></div>'
-     + '<div class="sheet-head"><h3>투표 인원 경기 편성</h3><button class="x" onclick="closeSheet()">✕</button></div>'
+     + '<div class="sheet-head"><h3>투표 인원 스쿼드 적용</h3><button class="x" onclick="closeSheet()">✕</button></div>'
      + '<div class="sheet-body">'
-     +   '<p style="font-size:13px;color:var(--steel);margin:0 0 12px;line-height:1.55;">선택한 항목에 투표한 인원을 경기 1쿼터에 편성합니다.<br>포지션은 선호 포지션 1순위(없으면 DF)로 배치됩니다.</p>'
-     +   '<div class="field"><label>참석으로 볼 항목<span class="req">*</span></label><div class="chips">'+opts+'</div></div>'
-     +   '<div class="field"><label>편성할 경기<span class="req">*</span></label><select id="as_match">'+(mopts||'<option value="">등록된 경기 없음</option>')+'</select></div>'
-     +   '<button class="btn-primary" onclick="runAssignVoters()">편성하기</button>'
+     +   '<p style="font-size:13px;color:var(--steel);margin:0 0 12px;line-height:1.55;">선택한 항목에 투표한 인원을 이 스쿼드에 배치합니다(기존 배치는 지워집니다).<br>포지션은 선호 1순위(없으면 DF)입니다.</p>'
+     +   '<div class="field"><label>투표<span class="req">*</span></label><select id="ap_poll" onchange="fillApplyOpts()">'+popts+'</select></div>'
+     +   '<div class="field"><label>참석으로 볼 항목<span class="req">*</span></label><div id="ap_opts" class="chips"><span style="font-size:12.5px;color:var(--steel-soft);">투표를 먼저 선택하세요</span></div></div>'
+     +   '<button class="btn-primary" onclick="runApplyVoters()">스쿼드에 적용</button>'
      + '</div>';
     showSheet(html);
   }).catch(function(){ toast('불러오기 실패'); });
 }
+function fillApplyOpts(){
+  var pid=(document.getElementById('ap_poll')||{}).value; assignPollId=pid; assignOpt=null;
+  var box=document.getElementById('ap_opts'); if(!box) return;
+  var p=(state.polls||[]).filter(function(x){return x.id===pid;})[0];
+  if(!p){ box.innerHTML='<span style="font-size:12.5px;color:var(--steel-soft);">투표를 먼저 선택하세요</span>'; return; }
+  box.innerHTML=(p.options||[]).map(function(o){ return '<div class="chip" data-as-opt="'+esc(o).replace(/"/g,'')+'" onclick="pickAssignOpt(this)">'+esc(o)+'</div>'; }).join('');
+}
 function pickAssignOpt(el){
   assignOpt = el.getAttribute('data-as-opt');
-  Array.prototype.forEach.call(document.querySelectorAll('#sheet .chip'), function(c){ c.classList.toggle('on', c===el); });
+  Array.prototype.forEach.call(document.querySelectorAll('#ap_opts .chip, #sheet .chip'), function(c){ c.classList.toggle('on', c===el); });
 }
-function runAssignVoters(){
+function runApplyVoters(){
+  if(!assignPollId){ toast('투표를 선택하세요'); return; }
   if(!assignOpt){ toast('참석 항목을 선택하세요'); return; }
-  var mid=(document.getElementById('as_match')||{}).value;
-  if(!mid){ toast('경기를 선택하세요'); return; }
-  API.run('assignVotersToMatch', assignPollId, assignOpt, mid).then(function(r){
-    SQUAD_CACHE={}; state.squadLoaded=false;
-    closeSheet(); toast((r&&r.count||0)+'명을 경기에 편성했습니다');
-  }).catch(function(){ toast('편성 실패'); });
+  var sid=applyTargetSquad;
+  API.run('applyVotersToSquad', assignPollId, assignOpt, sid).then(function(r){
+    if(r && r.detail){ SQUAD_CACHE[sid]=r.detail; state.squadDetail=r.detail; }
+    state.squadList=(state.squadList||[]).map(function(s){ return s.id===sid?Object.assign({},s,{count:r.detail?r.detail.members.length:s.count}):s; });
+    closeSheet(); render(); toast((r&&r.count||0)+'명을 스쿼드에 적용했습니다');
+  }).catch(function(){ toast('적용 실패'); });
+}
+/* 투표 상세에서: 투표 고정 → 스쿼드+항목 선택 */
+function openApplyToSquad(pollId){
+  if(!requireAdmin()) return;
+  assignPollId=pollId; assignOpt=null;
+  API.run('getSquads').then(function(list){
+    state.squadList=list||[];
+    var p=(state.polls||[]).filter(function(x){return x.id===pollId;})[0] || {options:[]};
+    if(!list || !list.length){ toast('먼저 스쿼드 탭에서 스쿼드를 만들어주세요'); return; }
+    var sopts=list.map(function(s){ return '<option value="'+s.id+'">'+esc(s.name)+'</option>'; }).join('');
+    var oopts=(p.options||[]).map(function(o){ return '<div class="chip" data-as-opt="'+esc(o).replace(/"/g,'')+'" onclick="pickAssignOpt(this)">'+esc(o)+'</div>'; }).join('');
+    var html='<div class="grabber"></div>'
+     + '<div class="sheet-head"><h3>투표 인원 스쿼드 적용</h3><button class="x" onclick="closeSheet()">✕</button></div>'
+     + '<div class="sheet-body">'
+     +   '<p style="font-size:13px;color:var(--steel);margin:0 0 12px;line-height:1.55;">선택한 항목에 투표한 인원을 스쿼드에 배치합니다(기존 배치는 지워집니다).</p>'
+     +   '<div class="field"><label>적용할 스쿼드<span class="req">*</span></label><select id="ap_squad">'+sopts+'</select></div>'
+     +   '<div class="field"><label>참석으로 볼 항목<span class="req">*</span></label><div id="ap_opts" class="chips">'+oopts+'</div></div>'
+     +   '<button class="btn-primary" onclick="runApplyToSquad()">스쿼드에 적용</button>'
+     + '</div>';
+    showSheet(html);
+  }).catch(function(){ toast('불러오기 실패'); });
+}
+function runApplyToSquad(){
+  if(!assignOpt){ toast('참석 항목을 선택하세요'); return; }
+  var sid=(document.getElementById('ap_squad')||{}).value;
+  if(!sid){ toast('스쿼드를 선택하세요'); return; }
+  API.run('applyVotersToSquad', assignPollId, assignOpt, sid).then(function(r){
+    SQUAD_CACHE[sid]=r&&r.detail?r.detail:SQUAD_CACHE[sid];
+    closeSheet(); toast((r&&r.count||0)+'명을 스쿼드에 적용했습니다');
+  }).catch(function(){ toast('적용 실패'); });
 }
 
 /* ---- 추가 참석 신청/승인 (요청 2) ---- */
@@ -1963,25 +2068,24 @@ var approveExtraId=null, approvePollId=null;
 function openApproveExtra(extraId, name, pollId){
   if(!requireAdmin()) return;
   approveExtraId=extraId; approvePollId=pollId;
-  var today=new Date().toISOString().slice(0,10);
-  var ms=(state.matches||[]).slice().sort(function(a,b){return a.date.localeCompare(b.date);});
-  var up=ms.filter(function(m){return m.date>=today;});
-  var list=(up.length?up:ms).slice(0,10);
-  var mopts='<option value="">경기에 편성 안 함</option>'+list.map(function(m){ return '<option value="'+m.id+'">'+fmtDateDot(m.date)+' vs '+esc(m.opponent||'상대 미정')+'</option>'; }).join('');
-  var html='<div class="grabber"></div>'
-   + '<div class="sheet-head"><h3>'+esc(name)+' · 추가 참석 승인</h3><button class="x" onclick="closeSheet()">✕</button></div>'
-   + '<div class="sheet-body">'
-   +   '<p style="font-size:13px;color:var(--steel);margin:0 0 12px;line-height:1.55;">승인하면서 경기에 바로 편성할지 선택할 수 있습니다.<br>편성 시 포지션은 선호 포지션 1순위(없으면 DF)입니다.</p>'
-   +   '<div class="field"><label>경기 편성</label><select id="ae_match">'+mopts+'</select></div>'
-   +   '<button class="btn-primary" onclick="runApproveExtra()">승인하기</button>'
-   + '</div>';
-  showSheet(html);
+  API.run('getSquads').then(function(list){
+    state.squadList=list||[];
+    var sopts='<option value="">스쿼드에 배치 안 함</option>'+(list||[]).map(function(s){ return '<option value="'+s.id+'">'+esc(s.name)+'</option>'; }).join('');
+    var html='<div class="grabber"></div>'
+     + '<div class="sheet-head"><h3>'+esc(name)+' · 추가 참석 승인</h3><button class="x" onclick="closeSheet()">✕</button></div>'
+     + '<div class="sheet-body">'
+     +   '<p style="font-size:13px;color:var(--steel);margin:0 0 12px;line-height:1.55;">승인하면서 스쿼드에 바로 배치할지 선택할 수 있습니다.<br>배치 시 포지션은 선호 1순위(없으면 DF)입니다.</p>'
+     +   '<div class="field"><label>스쿼드 배치</label><select id="ae_squad">'+sopts+'</select></div>'
+     +   '<button class="btn-primary" onclick="runApproveExtra()">승인하기</button>'
+     + '</div>';
+    showSheet(html);
+  }).catch(function(){ toast('불러오기 실패'); });
 }
 function runApproveExtra(){
-  var mid=(document.getElementById('ae_match')||{}).value||null;
-  API.run('approveExtra', approveExtraId, mid, authId()).then(function(d){
-    if(mid){ SQUAD_CACHE={}; state.squadLoaded=false; }
-    renderPollDetail(d); toast('승인했습니다'+(mid?' · 경기에 편성됨':''));
+  var sid=(document.getElementById('ae_squad')||{}).value||null;
+  API.run('approveExtra', approveExtraId, sid, authId()).then(function(d){
+    if(sid && SQUAD_CACHE[sid]) delete SQUAD_CACHE[sid];
+    renderPollDetail(d); toast('승인했습니다'+(sid?' · 스쿼드에 배치됨':''));
   }).catch(function(){ toast('승인 실패'); });
 }
 function rejectExtraGo(extraId){
@@ -2142,15 +2246,22 @@ var REGIONS = [
   '부산','대구','대전','광주','울산','세종','제주',
   '강원','충북','충남','전북','전남','경북','경남','기타'
 ];
-function ownClub(){ return (state.clubs||[]).filter(function(c){return c.own;})[0] || (state.clubs||[])[0] || null; }
+function ownClub(){ return activeClub() || (state.clubs||[]).filter(function(c){return c.own;})[0] || null; }
+function setHeader_(emblem, name, sub){
+  var img=document.querySelector('.crest-img'); if(img && emblem) img.src=emblem;
+  var nameEl=document.querySelector('.club .name'); if(nameEl) nameEl.innerHTML=name;
+  var tagEl=document.querySelector('.club .tag'); if(tagEl) tagEl.textContent=sub;
+}
+function applyAppHeader(){ setHeader_(APP_LOGO, esc(APP_NAME), APP_SUB); }
+function activeClub(){ return (state.clubs||[]).filter(function(c){return c.id===state.activeClubId;})[0] || null; }
 function applyClubHeader(){
-  var c = ownClub(); if(!c) return;
-  var img = document.querySelector('.crest-img');
-  if(img && c.emblem){ img.src = c.emblem; LOGO_URI = c.emblem; }
-  var nameEl = document.querySelector('.club .name');
-  if(nameEl) nameEl.innerHTML = esc(c.name) + (c.region ? ' <span class="rg">'+esc(c.region)+'</span>' : '');
-  var tagEl = document.querySelector('.club .tag');
-  if(tagEl && c.note) tagEl.textContent = c.note;
+  var c = activeClub(); if(!c){ applyAppHeader(); return; }
+  setHeader_(c.emblem||APP_LOGO, esc(c.name)+(c.region?' <span class="rg">'+esc(c.region)+'</span>':''), c.note||'');
+}
+/* 화면에 맞는 헤더 자동 적용: 팀 탭 = 앱, 나머지 = 활성 팀 */
+function applyHeaderFor(screen){
+  if(screen==='club') applyAppHeader();
+  else applyClubHeader();
 }
 function viewClub(){
   var addBtn = state.auth ? '<button class="btn-add-match" onclick="openClubForm()">＋ 팀 등록</button>' : '';
@@ -2183,19 +2294,25 @@ function viewClub(){
     body = list.map(function(c){
       var em = c.emblem ? '<img src="'+c.emblem+'" class="club-emblem" alt="">' : '<div class="club-emblem club-emblem-empty">🛡️</div>';
       var star = '<button class="club-star '+(c.fav?'on':'')+'" onclick="toggleClubFav(\''+c.id+'\')" aria-label="즐겨찾기">'+(c.fav?'★':'☆')+'</button>';
-      return '<div class="club-card">'
+      var joined = canEnterClub(c.id);
+      var isActive = (c.id===state.activeClubId);
+      var right = isActive ? '<span class="cc-cur oswald">현재</span>'
+                : joined ? '<button class="btn-mini" onclick="enterClub(\''+c.id+'\')">입장</button>'
+                : '<span class="cc-lock">미가입</span>';
+      var del = (isAdmin() && joined) ? '<button class="btn-mini ghost" style="margin-left:6px;" onclick="deleteClubConfirm(\''+c.id+'\',\''+esc(c.name).replace(/'/g,'')+'\')">삭제</button>' : '';
+      return '<div class="club-card'+(isActive?' on':'')+'"'+(joined&&!isActive?' onclick="enterClub(\''+c.id+'\')" style="cursor:pointer;"':'')+'>'
         + star
         + em
         + '<div style="flex:1;min-width:0;">'
-        +   '<div class="cc-name">'+esc(c.name)+(c.region?' <span class="rg">'+esc(c.region)+'</span>':'')+(c.own?' <span class="cc-own oswald">우리 팀</span>':'')+'</div>'
+        +   '<div class="cc-name">'+esc(c.name)+(c.region?' <span class="rg">'+esc(c.region)+'</span>':'')+'</div>'
         +   (c.note?'<div class="cc-note">'+esc(c.note)+'</div>':'')
         + '</div>'
-        + (isAdmin()?'<button class="btn-mini ghost" onclick="deleteClubConfirm(\''+c.id+'\',\''+esc(c.name).replace(/'/g,'')+'\')">삭제</button>':'')
+        + '<div onclick="event.stopPropagation();" style="display:flex;align-items:center;">'+right+del+'</div>'
         + '</div>';
     }).join('');
   }
   return addBtn + '<div class="eyebrow">등록된 팀 · '+list.length+'</div>' + filterBar + body
-    + '<p class="hint">별(★)을 눌러 즐겨찾기할 수 있습니다.<br>첫 번째로 등록한 팀이 앱 상단에 표시되는 우리 팀이 됩니다.</p>';
+    + '<p class="hint">가입한 팀의 [입장]을 눌러 해당 팀으로 접속합니다.<br>팀을 만든 사람은 자동으로 임원이 됩니다.</p>';
 }
 function setClubRegion(v){ state.clubRegionFilter=v; render(); }
 function toggleClubFavOnly(){ state.clubFavOnly=!state.clubFavOnly; render(); }
@@ -2262,23 +2379,27 @@ function saveClub(){
     API.run('updateClub', data).then(function(list){ if(list){ state.clubs=list; applyClubHeader(); if(state.screen==='club'||state.screen==='more') render(); } }).catch(function(){ toast('저장 실패 · 새로고침'); });
     return;
   }
-  // 신규 등록
-  data.ownerId = state.auth?state.auth.playerId:'';
-  var tmp=Object.assign({id:'tmp'+Date.now(), own:(state.clubs||[]).length===0, createdAt:new Date().toISOString()}, data);
-  state.clubs=(state.clubs||[]).concat([tmp]);
-  if(state.auth && state.auth.role!=='임원'){
-    state.auth.role='임원'; saveSession(state.auth);
-    state.players=(state.players||[]).map(function(p){ return p.id===state.auth.playerId ? Object.assign({},p,{role:'임원'}) : p; });
-  }
-  closeSheet(); applyClubHeader(); render(); toast('팀을 등록했습니다'+(tmp.own?' · 우리 팀으로 설정':''));
-  API.run('addClub', data).then(function(list){ if(list){ state.clubs=list; applyClubHeader(); if(state.screen==='club') render(); } }).catch(function(){ toast('저장 실패 · 새로고침'); });
+  // 신규 등록: 생성자 프로필 전송 → 서버가 임원 멤버십 생성
+  if(!state.auth){ toast('로그인이 필요합니다'); return; }
+  var me=(state.players||[]).filter(function(p){return p.id===authId();})[0]||{};
+  data.owner = { name:state.auth.name, num:me.num||1, size:me.size||'L', positions:me.positions||[], birth:me.birth||'', height:me.height||null, weight:me.weight||null, region:me.region||'' };
+  closeSheet(); toast('팀을 등록하는 중...');
+  API.run('addClub', data).then(function(res){
+    if(!res){ toast('저장 실패 · 새로고침'); return; }
+    state.clubs = res.clubs || state.clubs;
+    state.loginNames = null;
+    if(res.membership){ state.auth.memberships = (state.auth.memberships||[]).concat([res.membership]); saveSession(state.auth); }
+    toast('팀을 등록했습니다 · 임원으로 입장');
+    if(res.membership){ enterClub(res.membership.clubId); }
+    else { render(); }
+  }).catch(function(){ toast('저장 실패 · 새로고침'); });
 }
 function deleteClubConfirm(id, name){
   if(!requireAdmin()) return;
   state.clubs=(state.clubs||[]).filter(function(c){return c.id!==id;});
-  if(state.clubs.length && !state.clubs.some(function(c){return c.own;})) state.clubs[0].own=true;
-  render(); applyClubHeader(); toast(name+' 팀을 삭제했습니다');
-  API.run('deleteClub', id).then(function(list){ if(list){ state.clubs=list; applyClubHeader(); } }).catch(function(){ toast('삭제 저장 실패 · 새로고침'); });
+  if(id===state.activeClubId){ state.activeClubId=null; ACTIVE_CLUB=null; window.ACTIVE_CLUB=null; state.screen='club'; applyAppHeader(); }
+  render(); toast(name+' 팀을 삭제했습니다');
+  API.run('deleteClub', id).then(function(list){ if(list){ state.clubs=list; if(state.screen==='club') render(); } }).catch(function(){ toast('삭제 저장 실패 · 새로고침'); });
 }
 
 function viewVenue(){
@@ -2700,7 +2821,7 @@ function assignMember(playerId, pos){
   d.members.sort(function(a,b){return a.num-b.num;});
   cacheSquad_(d); render();
   API.run('setSquadMember', state.currentSquadId, playerId, pos).then(function(res){
-    cacheSquad_(res); if(state.currentSquadId===res.squad.id && state.screen==='squad') render();
+    cacheSquad_(res); if(res.squad && state.currentSquadId===res.squad.id && state.screen==='form') render();
   }).catch(function(){ toast('편성 저장 실패 · 새로고침'); });
 }
 function removeMemberConfirm(playerId, name){
@@ -2709,7 +2830,7 @@ function removeMemberConfirm(playerId, name){
   d.members = d.members.filter(function(m){return m.playerId!==playerId;});
   cacheSquad_(d); render(); toast(name+' 편성 해제');
   API.run('removeSquadMember', state.currentSquadId, playerId).then(function(res){
-    cacheSquad_(res); if(state.currentSquadId===res.squad.id && state.screen==='squad') render();
+    cacheSquad_(res); if(res.squad && state.currentSquadId===res.squad.id && state.screen==='form') render();
   }).catch(function(){ toast('저장 실패 · 새로고침'); });
 }
 function openQuarterMenu(){
@@ -2756,7 +2877,7 @@ function saveNote(phase){
   d.notes.push({id:tmpId, phase:phase, scope:scope, body:body});
   cacheSquad_(d); closeSheet(); render(); toast('등록되었습니다');
   API.run('addNote', state.currentSquadId, phase, scope, body).then(function(res){
-    cacheSquad_(res); if(state.currentSquadId===res.squad.id && state.screen==='squad') render();
+    cacheSquad_(res); if(res.squad && state.currentSquadId===res.squad.id && state.screen==='form') render();
   }).catch(function(){ toast('저장 실패 · 새로고침'); });
 }
 function deleteNoteConfirm(id){
@@ -2765,7 +2886,7 @@ function deleteNoteConfirm(id){
   d.notes = d.notes.filter(function(n){return n.id!==id;});
   cacheSquad_(d); render(); toast('삭제되었습니다');
   API.run('deleteNote', id).then(function(res){
-    cacheSquad_(res); if(res.squad && state.currentSquadId===res.squad.id && state.screen==='squad') render();
+    cacheSquad_(res); if(res.squad && state.currentSquadId===res.squad.id && state.screen==='form') render();
   }).catch(function(){ toast('저장 실패 · 새로고침'); });
 }
 
@@ -2875,8 +2996,11 @@ function toast(msg){
 }
 
 /* ================= 인증 (로그인) ================= */
-function authId(){ return state.auth ? state.auth.playerId : ''; }
-function isAdmin(){ return !!(state.auth && state.auth.role==='임원'); }
+function activeMembership(){ if(!state.auth||!state.auth.memberships) return null; for(var i=0;i<state.auth.memberships.length;i++){ if(state.auth.memberships[i].clubId===state.activeClubId) return state.auth.memberships[i]; } return null; }
+function authId(){ var m=activeMembership(); return m?m.playerId:(state.auth?state.auth.playerId:''); }
+function isAdmin(){ var m=activeMembership(); return !!(m && m.role==='임원'); }
+function myClubIds(){ return (state.auth&&state.auth.memberships)?state.auth.memberships.map(function(x){return x.clubId;}):[]; }
+function canEnterClub(id){ return myClubIds().indexOf(id)>=0; }
 function requireAdmin(){ if(!isAdmin()){ toast('임원만 사용할 수 있습니다'); return false; } return true; }
 
 function saveSession(a){ try{ localStorage.setItem('kj_auth', JSON.stringify(a)); }catch(e){} }
@@ -2887,14 +3011,11 @@ var loginPid = null;
 function showLogin(){
   var sel = document.getElementById('authScreen');
   loginPid = null;
-  var c = ownClub();
-  var logo = (c && c.emblem) ? c.emblem : LOGO_URI;
-  var title = c ? c.name : 'FC JEMIRO';
   sel.innerHTML = ''
     + '<div class="auth-inner">'
-    + '<img class="auth-logo" src="'+logo+'" alt="'+esc(title)+'">'
-    + '<div class="auth-title">'+esc(title)+'</div>'
-    + '<div class="auth-sub">팀 운영 · 로그인</div>'
+    + '<img class="auth-logo" src="'+APP_LOGO+'" alt="'+esc(APP_NAME)+'">'
+    + '<div class="auth-title">'+esc(APP_NAME)+'</div>'
+    + '<div class="auth-sub">'+esc(APP_SUB)+'</div>'
     + '<div class="auth-form">'
     +   '<input id="au_search" type="text" placeholder="이름 입력 (예: 김)" autocomplete="off" oninput="filterLoginList()" onfocus="filterLoginList()">'
     +   '<div id="au_list" class="au-list"></div>'
@@ -2905,55 +3026,62 @@ function showLogin(){
   sel.style.display = 'block';
   document.getElementById('tabbar').style.display = 'none';
   document.getElementById('fab').style.display = 'none';
+  ACTIVE_CLUB=null; window.ACTIVE_CLUB=null;
+  if(!state.loginNames){ API.run('getPlayers').then(function(list){ state.loginNames=(list||[]); }).catch(function(){ state.loginNames=[]; }); }
+}
+function loginPeople_(){
+  var src = state.loginNames || state.players || [];
+  var seen={}, out=[];
+  src.slice().sort(function(a,b){return (a.num||0)-(b.num||0);}).forEach(function(p){ if(!seen[p.name]){ seen[p.name]=1; out.push(p); } });
+  return out;
 }
 function filterLoginList(){
   var q = ((document.getElementById('au_search')||{}).value||'').trim().toLowerCase();
   var box = document.getElementById('au_list'); if(!box) return;
   loginPid = null;
-  var list = state.players.slice().sort(function(a,b){return a.num-b.num;})
+  var list = loginPeople_()
     .filter(function(p){ return !q || String(p.name).toLowerCase().indexOf(q)>=0; })
     .slice(0, 8);
   if(!list.length){ box.innerHTML='<div class="au-item" style="color:rgba(255,255,255,.5);cursor:default;">일치하는 이름이 없습니다</div>'; box.style.display='block'; return; }
-  // 정확히 1명 남고 이름이 완전 일치하면 자동 선택
   var exact = list.filter(function(p){ return String(p.name).toLowerCase()===q; });
-  if(exact.length===1) loginPid = exact[0].id;
+  if(exact.length===1) loginPid = exact[0].name;
   box.innerHTML = list.map(function(p){
-    return '<div class="au-item" onclick="pickLoginUser(\''+p.id+'\',\''+esc(p.name).replace(/'/g,'')+'\')"><span class="num">'+p.num+'</span>'+esc(p.name)+'</div>';
+    return '<div class="au-item" onclick="pickLoginUser(\''+esc(p.name).replace(/'/g,'')+'\')"><span class="num">'+(p.num||'')+'</span>'+esc(p.name)+'</div>';
   }).join('');
   box.style.display='block';
 }
-function pickLoginUser(pid, name){
-  loginPid = pid;
+function pickLoginUser(name){
+  loginPid = name;
   var inp = document.getElementById('au_search'); if(inp) inp.value = name;
   var box = document.getElementById('au_list'); if(box) box.style.display='none';
   var pw = document.getElementById('au_pw'); if(pw) pw.focus();
 }
 function doLogin(){
-  var pid = loginPid;
-  if(!pid){
-    // 입력한 이름이 정확히 1명과 일치하면 그 사람으로
-    var q = ((document.getElementById('au_search')||{}).value||'').trim().toLowerCase();
-    var hit = state.players.filter(function(p){ return String(p.name).toLowerCase()===q; });
-    if(hit.length===1) pid = hit[0].id;
+  var name = loginPid;
+  if(!name){
+    var q = ((document.getElementById('au_search')||{}).value||'').trim();
+    var hit = loginPeople_().filter(function(p){ return p.name===q; });
+    if(hit.length===1) name = hit[0].name;
   }
   var pw = (document.getElementById('au_pw')||{}).value;
-  if(!pid){ toast('이름을 입력 후 목록에서 선택하세요'); return; }
+  if(!name){ toast('이름을 입력 후 목록에서 선택하세요'); return; }
   if(!pw){ toast('비밀번호를 입력하세요'); return; }
   var btn=document.querySelector('.auth-btn'); if(btn){btn.textContent='확인 중...';btn.disabled=true;}
-  API.run('login', pid, pw).then(function(r){
+  API.run('login', name, pw).then(function(r){
     if(!r || !r.ok){ if(btn){btn.textContent='로그인';btn.disabled=false;} toast((r&&r.error)||'로그인 실패'); return; }
-    state.auth = {playerId:r.playerId, name:r.name, role:r.role, token:r.token};
+    state.auth = {name:r.name, memberships:r.memberships||[], token:r.token};
     saveSession(state.auth);
-    document.getElementById('authScreen').style.display='none';
-    document.getElementById('tabbar').style.display='flex';
-    toast(r.name+'님 환영합니다 · '+r.role);
-    state.screen='team'; loadTeam();
-    if(r.firstLogin){ setTimeout(function(){ openMyPw(true); }, 600); }
+    toast(r.name+'님 환영합니다');
+    afterLogin_();
+    if(r.firstLogin){ setTimeout(function(){ openMyPw(true); }, 700); }
   }).catch(function(){ if(btn){btn.textContent='로그인';btn.disabled=false;} toast('로그인에 실패했습니다'); });
 }
 function logout(){
   clearSession(); state.auth=null;
+  state.activeClubId=null; ACTIVE_CLUB=null; window.ACTIVE_CLUB=null;
+  state.players=[]; state.matches=[]; state.loginNames=null;
   closeSheet();
+  applyAppHeader();
   showLogin();
 }
 
@@ -2983,15 +3111,15 @@ var FS_MAP = {
 var WRITE_TOUCH = {
   addPlayer:['players'], updatePlayer:['players'], deletePlayer:['players','members'], setMemberRole:['players'],
   addMatch:['matches'], updateMatch:['matches'], deleteMatch:['matches','squads','members','notes'], recordMatchResult:['matches'],
-  createSquad:['squads'], deleteSquad:['squads','members','notes'],
+  createSquad:['squads'], deleteSquad:['squads','members','notes'], renameSquad:['squads'],
   setSquadMember:['members'], setSquadMemberPos:['members'], removeSquadMember:['members'],
+  applyVotersToSquad:['members'], loadAllToSquad:['members'],
   addNote:['notes'], deleteNote:['notes'],
   setMatchStats:['stats'], setMatchAttendance:['attendance'],
   createPoll:['polls'], closePoll:['polls'], deletePoll:['polls','votes'], castVote:['votes'],
   addPost:['posts'], togglePin:['posts'], deletePost:['posts'],
   addClub:['clubs','players'], updateClub:['clubs'], deleteClub:['clubs'], toggleClubFav:['clubs'],
-  requestExtra:['extras'], approveExtra:['extras','members','squads'], rejectExtra:['extras'],
-  assignVotersToMatch:['members','squads']
+  requestExtra:['extras'], approveExtra:['extras','members'], rejectExtra:['extras']
 };
 function fsClean(x){ var c={}; for(var k in x){ if(k==='pw'||k==='pwHash'||k==='_row') continue; c[k]=x[k]; } return c; }
 function fsSnapshot(keys){
@@ -3021,31 +3149,41 @@ function fsHash(pw){
     return 'v1:'+hex;
   });
 }
-function fsLogin(pid, pw){
-  return db.collection('members').doc(String(pid)).get().then(function(doc){
-    if(!doc.exists) return {ok:false, error:'선수를 찾을 수 없습니다'};
-    var m=doc.data(); var stored=m.pwHash||'';
-    var check = stored ? fsHash(pw).then(function(h){return h===stored;}) : Promise.resolve(String(pw)==='jemiro');
-    return check.then(function(good){
-      if(!good) return {ok:false, error:'비밀번호가 올바르지 않습니다'};
-      return {ok:true, playerId:String(pid), name:m.name, role:(m.role==='임원'?'임원':'팀원'), firstLogin:!stored, token:'fs.'+pid};
-    });
+function fsLogin(name, pw){
+  var mates=(DB.players||[]).filter(function(x){return x.name===name;});
+  if(!mates.length) return Promise.resolve({ok:false, error:'선수를 찾을 수 없습니다'});
+  var stored=(mates.filter(function(x){return x.pwHash;})[0]||{}).pwHash||'';
+  var check = stored ? fsHash(pw).then(function(h){return h===stored;}) : Promise.resolve(String(pw)==='jemiro');
+  return check.then(function(good){
+    if(!good) return {ok:false, error:'비밀번호가 올바르지 않습니다'};
+    var memberships=mates.map(function(x){ return {clubId:x.clubId||null, playerId:String(x.id), role:(x.role==='임원'?'임원':'팀원')}; });
+    return {ok:true, name:name, memberships:memberships, firstLogin:!stored, token:'fs.'+name};
   });
 }
 function fsSetMyPassword(pid, oldPw, newPw){
   if(!newPw || String(newPw).trim().length<4) return Promise.resolve({ok:false, error:'새 비밀번호는 4자 이상'});
-  var ref=db.collection('members').doc(String(pid));
-  return ref.get().then(function(doc){
-    if(!doc.exists) return {ok:false, error:'선수를 찾을 수 없습니다'};
-    var stored=doc.data().pwHash||'';
-    var check = stored ? fsHash(oldPw).then(function(h){return h===stored;}) : Promise.resolve(String(oldPw)==='jemiro');
-    return check.then(function(good){
-      if(!good) return {ok:false, error:'현재 비밀번호가 올바르지 않습니다'};
-      return fsHash(String(newPw).trim()).then(function(h){ return ref.set({pwHash:h},{merge:true}).then(function(){ return {ok:true}; }); });
+  var me=(DB.players||[]).filter(function(x){return String(x.id)===String(pid);})[0];
+  if(!me) return Promise.resolve({ok:false, error:'선수를 찾을 수 없습니다'});
+  var mates=(DB.players||[]).filter(function(x){return x.name===me.name;});
+  var stored=(mates.filter(function(x){return x.pwHash;})[0]||{}).pwHash||'';
+  var check = stored ? fsHash(oldPw).then(function(h){return h===stored;}) : Promise.resolve(String(oldPw)==='jemiro');
+  return check.then(function(good){
+    if(!good) return {ok:false, error:'현재 비밀번호가 올바르지 않습니다'};
+    return fsHash(String(newPw).trim()).then(function(h){
+      var b=db.batch();
+      mates.forEach(function(x){ x.pwHash=h; b.set(db.collection('members').doc(String(x.id)), {pwHash:h}, {merge:true}); });
+      return b.commit().then(function(){ return {ok:true}; });
     });
   });
 }
-function fsResetPw(pid){ return db.collection('members').doc(String(pid)).set({pwHash:''},{merge:true}).then(function(){ return {ok:true}; }); }
+function fsResetPw(pid){
+  var me=(DB.players||[]).filter(function(x){return String(x.id)===String(pid);})[0];
+  if(!me) return Promise.resolve({ok:false});
+  var mates=(DB.players||[]).filter(function(x){return x.name===me.name;});
+  var b=db.batch();
+  mates.forEach(function(x){ x.pwHash=''; b.set(db.collection('members').doc(String(x.id)), {pwHash:''}, {merge:true}); });
+  return b.commit().then(function(){ return {ok:true}; });
+}
 
 /* Firestore → 메모리(DB) 로드 */
 function fsColl(name){ return db.collection(name).get().then(function(snap){ var a=[]; snap.forEach(function(d){ var o=d.data()||{}; a.push(o); }); return a; }); }
@@ -3090,6 +3228,19 @@ function fsSeedClub_(){
   DB.clubs = [club];
   return db.collection('clubs').doc(club.id).set(fsClean(club), {merge:true}).catch(function(){});
 }
+function fsStampClub_(){
+  var own = (DB.clubs||[]).filter(function(c){return c.own;})[0] || (DB.clubs||[])[0];
+  if(!own) return Promise.resolve();
+  var cid = own.id;
+  var b=db.batch(); var n=0;
+  Object.keys(FS_MAP).forEach(function(k){
+    if(k==='clubs') return;
+    var m=FS_MAP[k];
+    (DB[k]||[]).forEach(function(x){ if(!x.clubId){ x.clubId=cid; b.set(db.collection(m.coll).doc(String(m.id(x))), {clubId:cid}, {merge:true}); n++; } });
+  });
+  if(n) return b.commit().catch(function(){});
+  return Promise.resolve();
+}
 FS.init = function(){
   if(!window.firebase){ return; }
   try{ firebase.initializeApp(FIREBASE_CONFIG); }catch(e){}
@@ -3098,6 +3249,7 @@ FS.init = function(){
   var authP = firebase.auth ? firebase.auth().signInAnonymously().catch(function(){}) : Promise.resolve();
   authP.then(function(){ return fsLoadAll(); })
     .then(function(){ return fsSeedClub_(); })
+    .then(function(){ return fsStampClub_(); })
     .then(function(){ FS._resolve(); })
     .catch(function(e){ if(window.console)console.warn('FS init', e); FS.loadFailed=true; FS._resolve(); });
 };
@@ -3106,11 +3258,46 @@ FS.init = function(){
 var LOGO_URI = (document.querySelector('.crest-img')||{}).src || '';
 FS.init();
 API.run('bootstrap').then(function(b){
-  if(b){ if(b.config) state.cfg=b.config; state.players=b.players||[]; state.matches=b.matches||[]; state.clubs=b.clubs||[]; state.matchesLoaded=true; applyClubHeader(); }
+  if(b){ if(b.config) state.cfg=b.config; state.clubs=b.clubs||[]; }
   var sess = loadSession();
-  if(sess && sess.playerId){ state.auth = sess; loadTeam(); }
-  else showLogin();
-}).catch(function(){ showLogin(); });
+  if(sess && sess.name && sess.memberships){
+    state.auth = sess;
+    afterLogin_();
+  } else {
+    applyAppHeader(); showLogin();
+  }
+}).catch(function(){ applyAppHeader(); showLogin(); });
+
+/* 로그인 후: 접근 가능한 팀이 1개면 자동 입장, 아니면 팀 탭 */
+function afterLogin_(){
+  var ids = myClubIds();
+  document.getElementById('authScreen').style.display='none';
+  document.getElementById('tabbar').style.display='flex';
+  var last = state.auth && state.auth.lastClub;
+  if(last && canEnterClub(last)){ enterClub(last); }
+  else if(ids.length===1){ enterClub(ids[0]); }
+  else { state.activeClubId=null; ACTIVE_CLUB=null; state.screen='club'; applyAppHeader(); render(); }
+}
+function enterClub(clubId){
+  if(!canEnterClub(clubId)){ toast('가입되지 않은 팀입니다'); return; }
+  state.activeClubId = clubId; ACTIVE_CLUB = clubId; window.ACTIVE_CLUB = clubId;
+  state.auth.lastClub = clubId; saveSession(state.auth);
+  // 팀 전환 시 팀별 데이터 캐시 초기화
+  state.players=[]; state.matches=[]; state.matchesLoaded=false;
+  state.squadLoaded=false; state.recLoaded=false; state.pollLoaded=false; state.boardLoaded=false;
+  SQUAD_CACHE={}; state.squadDetail=null; state.matchSquads=[]; state.currentMatch=null; state.currentSquadId=null;
+  applyClubHeader();
+  state.screen='team';
+  API.run('bootstrap');  // no-op warmup
+  loadClubData_();
+}
+function loadClubData_(){
+  state.loading=true; render();
+  Promise.all([API.run('getPlayers'), API.run('getMatches')]).then(function(r){
+    state.players=r[0]||[]; state.matches=r[1]||[]; state.matchesLoaded=true; state.loading=false;
+    if(state.screen==='team') render();
+  }).catch(function(){ state.loading=false; render(); });
+}
 </script>
 </body>
 </html>
