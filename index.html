@@ -12,6 +12,7 @@
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<!-- 카카오 로그인은 백엔드 OAuth로 처리 (JS SDK 불필요). 카카오맵 SDK는 별도 로드됨 -->
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 <style>
   :root{
@@ -443,6 +444,16 @@
   .auth-btn{padding:15px;border:none;border-radius:13px;background:var(--red);color:#fff;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;box-shadow:0 8px 20px rgba(211,20,36,.4);}
   .auth-btn:active{background:var(--red-deep);}
   .auth-hint{font-size:11.5px;color:#9ca0a8;text-align:center;margin:6px 0 0;line-height:1.5;}
+  .auth-choice-btn{padding:15px;border-radius:13px;background:rgba(255,255,255,.12);color:#fff;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;border:1px solid rgba(255,255,255,.22);}
+  .auth-choice-btn:active{background:rgba(255,255,255,.2);}
+  .auth-ghost-btn{padding:13px;border:none;border-radius:13px;background:transparent;color:var(--gold-soft);font-size:14px;font-weight:600;font-family:inherit;cursor:pointer;}
+  .auth-social{padding:14px;border:none;border-radius:13px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;}
+  .auth-social.kakao{background:#FEE500;color:#191600;}
+  .auth-social.kakao:active{background:#f2da00;}
+  .auth-links{display:flex;justify-content:space-between;align-items:center;margin-top:2px;}
+  .auth-links .auth-link:only-child{margin:0 auto;}
+  .auth-link{color:var(--gold-soft);font-size:13px;font-weight:600;cursor:pointer;padding:6px 2px;}
+  .auth-team-name{font-size:15px;font-weight:800;color:var(--gold);text-align:center;padding:2px 0 4px;}
 
   .stat-strip{display:flex;gap:9px;margin-bottom:14px;}
   .stat{flex:1;background:linear-gradient(150deg,#1B1922,#111015);color:#fff;border-radius:16px;padding:14px 13px;position:relative;overflow:hidden;border:1px solid rgba(199,162,75,.25);}
@@ -666,6 +677,7 @@ var DB = {
     {id:'po3', type:'suggest', title:'경기 후 회식 장소 건의', body:'매화 축구장 근처에 새로 생긴 삼겹살집 어떨까요? 단체석도 있습니다.', author:'박민재', authorId:'m3', pinned:false, createdAt:'2025-07-07T12:00:00Z'}
   ],
   clubs: [],
+  owners: [],
   extras: [],
   matchRoster: [],
   noteComments: []
@@ -698,6 +710,17 @@ var API = {
     });
   }
 };
+function ownerMemberships_(ownerAccId){
+  var out=[];
+  (DB.clubs||[]).forEach(function(c){
+    if(c.ownerId && c.ownerId===ownerAccId){
+      var pm = (DB.players||[]).filter(function(p){return p.clubId===c.id && p.ownerId===ownerAccId;})[0]
+            || (DB.players||[]).filter(function(p){return p.clubId===c.id && p.role==='임원';})[0];
+      out.push({clubId:c.id, playerId:pm?pm.id:null, role:'임원'});
+    }
+  });
+  return out;
+}
 function mockHandler(fn, a){
   var id;
   var AC = (typeof ACTIVE_CLUB!=='undefined' && ACTIVE_CLUB) ? ACTIVE_CLUB : null;
@@ -709,13 +732,13 @@ function mockHandler(fn, a){
   if(fn==='addClub'){
     var cd=a[0];
     var cid='c'+Date.now();
-    var club={id:cid, name:cd.name, region:cd.region||'', note:cd.note||'', emblem:cd.emblem||'', own:false, createdAt:new Date().toISOString()};
+    var club={id:cid, name:cd.name, region:cd.region||'', note:cd.note||'', emblem:cd.emblem||'', own:false, ownerId:cd.ownerId||null, createdAt:new Date().toISOString()};
     DB.clubs.push(club);
     var membership=null;
     if(cd.owner && cd.owner.name){
       var opid='m'+Date.now();
       var existPw=(DB.players.filter(function(x){return x.name===cd.owner.name && x.pw;})[0]||{}).pw||'';
-      DB.players.push({id:opid, clubId:cid, name:cd.owner.name, num:(cd.owner.num!=null&&cd.owner.num!==''?cd.owner.num:''), size:cd.owner.size||'L', positions:cd.owner.positions||[], birth:cd.owner.birth||'', height:cd.owner.height||null, weight:cd.owner.weight||null, region:cd.owner.region||'', role:'임원', pw:existPw});
+      DB.players.push({id:opid, clubId:cid, name:cd.owner.name, num:(cd.owner.num!=null&&cd.owner.num!==''?cd.owner.num:''), size:cd.owner.size||'L', positions:cd.owner.positions||[], birth:cd.owner.birth||'', height:cd.owner.height||null, weight:cd.owner.weight||null, region:cd.owner.region||'', role:'임원', ownerId:cd.ownerId||null, pw:existPw});
       membership={clubId:cid, playerId:opid, role:'임원'};
     }
     return {clubs:mockHandler('getClubs',[]), membership:membership};
@@ -888,6 +911,39 @@ function mockHandler(fn, a){
     if(pw!==expected) return {ok:false, error:'비밀번호가 올바르지 않습니다'};
     var memberships=mates.map(function(x){ return {clubId:x.clubId||null, playerId:x.id, role:(x.role==='임원'?'임원':'팀원')}; });
     return {ok:true, name:lname, memberships:memberships, firstLogin:!withPw, token:'mock.'+lname};
+  }
+  if(fn==='ownerSignup'){ // a: ownerId, pw, name
+    var oid=String(a[0]||'').trim(), opw=String(a[1]||''), onm=String(a[2]||'').trim();
+    if(!oid||!opw||!onm) return {ok:false, error:'모든 항목을 입력하세요'};
+    if(opw.length<4) return {ok:false, error:'비밀번호는 4자 이상이어야 합니다'};
+    if((DB.owners||[]).some(function(o){return o.provider==='app' && String(o.ownerId).toLowerCase()===oid.toLowerCase();})) return {ok:false, error:'이미 사용 중인 아이디입니다'};
+    var od={id:'own_'+Date.now(), ownerId:oid, name:onm, pw:opw, provider:'app', createdAt:new Date().toISOString()};
+    DB.owners.push(od);
+    return {ok:true, type:'owner', ownerId:od.id, name:onm, memberships:ownerMemberships_(od.id), token:'mock.own.'+od.id};
+  }
+  if(fn==='ownerLogin'){ // a: ownerId, pw
+    var lid=String(a[0]||'').trim(), lpw=String(a[1]||'');
+    var o=(DB.owners||[]).filter(function(o){return o.provider==='app' && String(o.ownerId).toLowerCase()===lid.toLowerCase();})[0];
+    if(!o) return {ok:false, error:'구단주 계정을 찾을 수 없습니다'};
+    if(String(o.pw)!==lpw) return {ok:false, error:'비밀번호가 올바르지 않습니다'};
+    return {ok:true, type:'owner', ownerId:o.id, name:o.name, memberships:ownerMemberships_(o.id), token:'mock.own.'+o.id};
+  }
+  if(fn==='ownerKakao'){ // a: kakaoId, name
+    var kid=String(a[0]||''), knm=String(a[1]||'카카오사용자');
+    var ok=(DB.owners||[]).filter(function(o){return o.provider==='kakao' && String(o.kakaoId)===kid;})[0];
+    if(!ok){ ok={id:'own_k'+Date.now(), ownerId:'kakao_'+kid, name:knm, provider:'kakao', kakaoId:kid, createdAt:new Date().toISOString()}; DB.owners.push(ok); }
+    return {ok:true, type:'owner', ownerId:ok.id, name:ok.name, memberships:ownerMemberships_(ok.id), token:'mock.own.'+ok.id};
+  }
+  if(fn==='getTeamMembers'){ // a: clubId
+    return DB.players.filter(function(p){return p.clubId===a[0];}).slice().sort(numSort).map(function(p){ return {id:p.id, name:p.name, num:p.num}; });
+  }
+  if(fn==='memberLogin'){ // a: clubId, name, pw
+    var mcid=a[0], mname=a[1], mpw=a[2];
+    var m=DB.players.filter(function(x){return x.clubId===mcid && x.name===mname;})[0];
+    if(!m) return {ok:false, error:'팀원을 찾을 수 없습니다'};
+    var mexp=(m.pw!=null && m.pw!=='') ? m.pw : 'jemiro';
+    if(String(mpw)!==String(mexp)) return {ok:false, error:'비밀번호가 올바르지 않습니다'};
+    return {ok:true, type:'member', name:m.name, clubId:mcid, memberships:[{clubId:mcid, playerId:m.id, role:(m.role==='임원'?'임원':'팀원')}], firstLogin:(m.pw==null||m.pw===''), token:'mock.mem.'+m.id};
   }
   if(fn==='setMyPassword'){ // a: playerId, oldPw, newPw
     var pu=DB.players.filter(function(x){return x.id===a[0];})[0];
@@ -1161,7 +1217,8 @@ var TABS = [
 
 function renderTabs(){
   var el = document.getElementById('tabbar');
-  el.innerHTML = TABS.map(function(t){
+  var TABLIST = isGuest() ? TABS.filter(function(t){return t.id==='club';}) : TABS;
+  el.innerHTML = TABLIST.map(function(t){
     return '<button class="tab '+(state.screen===t.id||((state.screen==='board'||state.screen==='venue'||state.screen==='poll')&&t.id==='more')?'active':'')+'" onclick="go(\''+t.id+'\')">'
       + '<svg viewBox="0 0 24 24"><path d="'+t.icon+'"/></svg>'
       + '<span class="lbl">'+t.label+'</span></button>';
@@ -1169,6 +1226,7 @@ function renderTabs(){
 }
 
 function go(id){
+  if(isGuest() && id!=='club'){ toast('게스트는 팀 탭만 이용할 수 있어요. 구단주·팀원 로그인 후 이용하세요.'); return; }
   // 팀 미선택 상태에서 팀 종속 탭 접근 차단
   var teamTabs={team:1,squad:1,form:1,record:1,att:1,more:1};
   if(teamTabs[id] && !state.activeClubId){ toast('먼저 팀을 선택하세요'); state.screen='club'; applyHeaderFor('club'); render(); return; }
@@ -1260,9 +1318,11 @@ function viewTeam(){
   var players = state.players.slice().sort(numSort);
   var body = players.length ? players.map(playerCard).join('') :
     '<div class="empty"><div class="ei">⚽</div>등록된 팀원이 없습니다.<br>우측 하단 + 버튼으로 추가하세요.</div>';
+  var invite = isAdmin() ? '<button class="btn-ghost" style="width:100%;margin:0 0 12px;" onclick="copyInviteLink()">🔗 팀원 초대 링크 복사</button>' : '';
   return '<div class="eyebrow">등록 선수 '+players.length+'명</div>'
+    + invite
     + '<div class="squad">'+body+'</div>'
-    + '<p class="hint">선수를 탭하면 정보 수정·삭제가 가능합니다.<br>필수 항목: 등번호 · 이름 · 유니폼 사이즈</p>';
+    + '<p class="hint">'+(isAdmin()?'초대 링크를 카톡·문자로 보내면 팀원이 이름 선택 후 비밀번호만으로 로그인해요.<br>':'')+'선수를 탭하면 정보 수정·삭제가 가능합니다.</p>';
 }
 function playerCard(p){
   var age = p.birth ? (new Date().getFullYear() - parseInt(p.birth.slice(0,4))+1) : null;
@@ -1942,7 +2002,7 @@ function viewMore(){
   +   (isAdmin()?'<div class="list-row" style="cursor:pointer;" onclick="copyVenueLink(location.hostname)"><span class="nm" style="flex:1;">현재 도메인 <span style="font-size:10px;color:var(--steel-soft);">(카카오맵 등록용)</span></span><span class="val" style="font-size:11.5px;color:var(--steel);word-break:break-all;">'+esc(location.hostname)+'</span></div>':'')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.19</p>';
+  + '<p class="hint">동네 축구왕 · v0.22</p>';
 }
 function moreItem(id,title,sub,icon){
   return '<div class="player" style="margin-bottom:9px;" onclick="go(\''+id+'\')">'
@@ -2600,7 +2660,9 @@ function applyHeaderFor(screen){
   else applyClubHeader();
 }
 function viewClub(){
-  var addBtn = state.auth ? '<button class="btn-add-match" onclick="openClubForm()">＋ 팀 등록</button>' : '';
+  var addBtn = isGuest()
+    ? '<button class="btn-add-match" onclick="guestToLogin()">🔑 로그인 / 회원가입</button>'
+    : (state.auth ? '<button class="btn-add-match" onclick="openClubForm()">＋ 팀 등록</button>' : '');
   var all = (state.clubs||[]);
   // 필터 상태
   if(state.clubRegionFilter===undefined) state.clubRegionFilter='';
@@ -2680,6 +2742,7 @@ function toggleClubFav(id){
 var clubEmblemData = '';
 function openClubForm(clubId){
   if(!state.auth){ toast('로그인이 필요합니다'); return; }
+  if(isGuest()){ toast('게스트는 팀을 만들 수 없어요. 구단주로 로그인해 주세요.'); return; }
   var c = clubId ? (state.clubs||[]).filter(function(x){return x.id===clubId;})[0] : null;
   if(clubId && !isAdmin()){ toast('임원만 팀 정보를 수정할 수 있습니다'); return; }
   state.editClubId = clubId || null;
@@ -2737,7 +2800,9 @@ function saveClub(){
   }
   // 신규 등록: 생성자 프로필 전송 → 서버가 임원 멤버십 생성
   if(!state.auth){ toast('로그인이 필요합니다'); return; }
+  if(isGuest()){ toast('게스트는 팀을 만들 수 없어요. 구단주로 로그인해 주세요.'); return; }
   var me=(state.players||[]).filter(function(p){return p.id===authId();})[0]||{};
+  data.ownerId = (state.auth && state.auth.type==='owner') ? state.auth.ownerId : null;
   data.owner = { name:state.auth.name, num:'', size:me.size||'L', positions:me.positions||[], birth:me.birth||'', height:me.height||null, weight:me.weight||null, region:me.region||'' };
   closeSheet(); toast('팀을 등록하는 중...');
   API.run('addClub', data).then(function(res){
@@ -2955,6 +3020,8 @@ function openMatchForm(id){
 
 /* 카카오맵 JavaScript 키 (클라이언트 공개용 · 도메인 화이트리스트로 보호) */
 var KAKAO_JS_KEY = '2d591b6ef9c70f94f369b7c55c91baa3';
+/* 카카오 로그인 백엔드 base URL (OAuth 토큰 교환 서버 · 배포 후 입력, 예: https://xxx.vercel.app) */
+var KAKAO_BACKEND = '';
 var venueMap=null, venueMarker=null, venuePick=null, leafletTried=false, kakaoTried=false;
 var kakaoMap=null, kakaoMarker=null, mapProvider=null;
 
@@ -3367,33 +3434,106 @@ function loadSession(){ try{ var s=localStorage.getItem('kj_auth'); return s?JSO
 function clearSession(){ try{ localStorage.removeItem('kj_auth'); }catch(e){} }
 
 var loginPid = null;
+function isGuest(){ return !!(state.auth && state.auth.type==='guest'); }
+function inviteClubId(){
+  try{
+    var s = (location.search || ''); if(s.charAt(0)==='?') s = s.slice(1);
+    var parts = s.split('&');
+    for(var i=0;i<parts.length;i++){ var kv=parts[i].split('='); if(kv[0]==='t') return decodeURIComponent(kv[1]||''); }
+  }catch(e){}
+  return '';
+}
 function showLogin(){
+  state.loginView = inviteClubId() ? 'member' : 'home';
+  renderAuth();
+}
+function renderAuth(){
   var sel = document.getElementById('authScreen');
   loginPid = null;
-  sel.innerHTML = ''
-    + '<div class="auth-inner">'
-    + '<img class="auth-logo" src="'+APP_LOGO+'" alt="'+esc(APP_NAME)+'">'
-    + '<div class="auth-title">동축</div>'
-    + '<div class="auth-name2">동네 축구왕</div>'
-    + '<div class="auth-sub">KICKTOWN</div>'
-    + '<div class="auth-form">'
-    +   '<input id="au_search" type="text" placeholder="이름 입력 (예: 김)" autocomplete="off" oninput="filterLoginList()" onfocus="filterLoginList()">'
-    +   '<div id="au_list" class="au-list"></div>'
-    +   '<input id="au_pw" type="password" placeholder="비밀번호" onkeydown="if(event.key===\'Enter\')doLogin()">'
-    +   '<button class="auth-btn" onclick="doLogin()">로그인</button>'
-    +   '<p class="auth-hint">처음이신가요? 초기 비밀번호는 <b>jemiro</b> 입니다.<br>로그인 후 나만의 비밀번호로 변경하세요.</p>'
-    + '</div></div>';
+  sel.innerHTML = '<div class="auth-inner">' + authHead_() + authBody_() + '</div>';
   sel.style.display = 'block';
   document.getElementById('tabbar').style.display = 'none';
   document.getElementById('fab').style.display = 'none';
   ACTIVE_CLUB=null; window.ACTIVE_CLUB=null;
-  if(!state.loginNames){ API.run('getPlayers').then(function(list){ state.loginNames=(list||[]); }).catch(function(){ state.loginNames=[]; }); }
+  if(state.loginView==='member'){
+    var cid = inviteClubId() || state.memberLoginClub || '';
+    if(cid) loadTeamMembers_(cid);
+  }
+}
+function authHead_(){
+  return '<img class="auth-logo" src="'+APP_LOGO+'" alt="'+esc(APP_NAME)+'">'
+    + '<div class="auth-title">동축</div>'
+    + '<div class="auth-name2">동네 축구왕</div>'
+    + '<div class="auth-sub">KICKTOWN</div>';
+}
+function authBody_(){
+  var v = state.loginView;
+  if(v==='owner') return ownerLoginView_();
+  if(v==='ownerSignup') return ownerSignupView_();
+  if(v==='member') return memberLoginView_();
+  return homeView_();
+}
+function homeView_(){
+  return '<div class="auth-form">'
+    + '<button class="auth-btn" onclick="gotoAuth(\'owner\')">구단주 로그인</button>'
+    + '<button class="auth-choice-btn" onclick="gotoAuth(\'member\')">팀원 로그인</button>'
+    + '<button class="auth-ghost-btn" onclick="doGuest()">게스트로 둘러보기</button>'
+    + '<p class="auth-hint">구단주는 팀을 만들고 관리해요.<br>팀원은 구단주가 보내준 초대 링크로 접속하세요.</p>'
+    + '</div>';
+}
+function ownerLoginView_(){
+  return '<div class="auth-form">'
+    + '<input id="ow_id" type="text" placeholder="아이디" autocomplete="username">'
+    + '<input id="ow_pw" type="password" placeholder="비밀번호" autocomplete="current-password" onkeydown="if(event.key===\'Enter\')doOwnerLogin()">'
+    + '<button class="auth-btn" onclick="doOwnerLogin()">구단주 로그인</button>'
+    + '<button class="auth-social kakao" onclick="doKakaoAuth()">카카오로 로그인</button>'
+    + '<div class="auth-links"><span class="auth-link" onclick="gotoAuth(\'ownerSignup\')">회원가입</span><span class="auth-link" onclick="gotoAuth(\'home\')">← 처음으로</span></div>'
+    + '</div>';
+}
+function ownerSignupView_(){
+  return '<div class="auth-form">'
+    + '<input id="su_name" type="text" placeholder="이름(닉네임)">'
+    + '<input id="su_id" type="text" placeholder="아이디" autocomplete="username">'
+    + '<input id="su_pw" type="password" placeholder="비밀번호 (4자 이상)" autocomplete="new-password">'
+    + '<input id="su_pw2" type="password" placeholder="비밀번호 확인" onkeydown="if(event.key===\'Enter\')doOwnerSignup()">'
+    + '<button class="auth-btn" onclick="doOwnerSignup()">가입하기</button>'
+    + '<button class="auth-social kakao" onclick="doKakaoAuth()">카카오로 가입</button>'
+    + '<div class="auth-links"><span class="auth-link" onclick="gotoAuth(\'owner\')">← 로그인으로</span></div>'
+    + '</div>';
+}
+function memberLoginView_(){
+  var invite = inviteClubId();
+  var cid = invite || state.memberLoginClub || '';
+  var teamSel = '';
+  if(!invite){
+    var opts = (state.clubs||[]).map(function(c){ return '<option value="'+c.id+'"'+(c.id===cid?' selected':'')+'>'+esc(c.name)+'</option>'; }).join('');
+    teamSel = '<select id="mb_team" onchange="onMemberTeamChange()"><option value="">팀 선택</option>'+opts+'</select>';
+  }
+  var teamNm = (state.clubs||[]).filter(function(c){ return c.id===cid; })[0];
+  var head = (invite && teamNm) ? '<div class="auth-team-name">'+esc(teamNm.name)+' 팀원 로그인</div>' : '';
+  return '<div class="auth-form">'
+    + head + teamSel
+    + '<input id="au_search" type="text" placeholder="이름 입력/선택" autocomplete="off" oninput="filterLoginList()" onfocus="filterLoginList()">'
+    + '<div id="au_list" class="au-list"></div>'
+    + '<input id="au_pw" type="password" placeholder="비밀번호" onkeydown="if(event.key===\'Enter\')doMemberLogin()">'
+    + '<button class="auth-btn" onclick="doMemberLogin()">로그인</button>'
+    + (invite ? '' : '<div class="auth-links"><span class="auth-link" onclick="gotoAuth(\'home\')">← 처음으로</span></div>')
+    + '<p class="auth-hint">초기 비밀번호는 <b>jemiro</b> 입니다.<br>로그인 후 나만의 비밀번호로 변경하세요.</p>'
+    + '</div>';
+}
+function gotoAuth(v){ state.loginView=v; if(v!=='member') state.loginNames=null; renderAuth(); }
+function onMemberTeamChange(){
+  var cid = (document.getElementById('mb_team')||{}).value || '';
+  state.memberLoginClub = cid; state.loginNames=null; loginPid=null;
+  loadTeamMembers_(cid);
+}
+function loadTeamMembers_(cid){
+  if(!cid){ state.loginNames=[]; filterLoginList(); return; }
+  API.run('getTeamMembers', cid).then(function(list){ state.loginNames=(list||[]); filterLoginList(); }).catch(function(){ state.loginNames=[]; });
 }
 function loginPeople_(){
-  var src = state.loginNames || state.players || [];
-  var seen={}, out=[];
-  src.slice().sort(numSort).forEach(function(p){ if(!seen[p.name]){ seen[p.name]=1; out.push(p); } });
-  return out;
+  var src = state.loginNames || [];
+  return src.slice().sort(numSort);
 }
 function filterLoginList(){
   var q = ((document.getElementById('au_search')||{}).value||'').trim().toLowerCase();
@@ -3406,7 +3546,7 @@ function filterLoginList(){
   var exact = list.filter(function(p){ return String(p.name).toLowerCase()===q; });
   if(exact.length===1) loginPid = exact[0].name;
   box.innerHTML = list.map(function(p){
-    return '<div class="au-item" onclick="pickLoginUser(\''+esc(p.name).replace(/'/g,'')+'\')"><span class="num">'+(p.num||'')+'</span>'+esc(p.name)+'</div>';
+    return '<div class="au-item" onclick="pickLoginUser(\''+esc(p.name).replace(/\x27/g,'')+'\')"><span class="num">'+(p.num||'')+'</span>'+esc(p.name)+'</div>';
   }).join('');
   box.style.display='block';
 }
@@ -3416,30 +3556,89 @@ function pickLoginUser(name){
   var box = document.getElementById('au_list'); if(box) box.style.display='none';
   var pw = document.getElementById('au_pw'); if(pw) pw.focus();
 }
-function doLogin(){
+function gv_(id){ var e=document.getElementById(id); return e?e.value:''; }
+function authBtnBusy_(b){ var btn=document.querySelector('.auth-btn'); if(btn){ btn.disabled=b; btn.textContent = b ? '확인 중...' : btn.textContent; } }
+function finishAuth_(r){
+  if(!r || !r.ok){ authBtnBusy_(false); toast((r&&r.error)||'실패했습니다'); return; }
+  state.auth = { type:r.type, name:r.name, ownerId:r.ownerId||null, memberships:r.memberships||[], token:r.token };
+  saveSession(state.auth);
+  afterLogin_();
+  if(r.firstLogin && r.type==='member'){ setTimeout(function(){ openMyPw(true); }, 700); }
+}
+function doGuest(){
+  state.auth = { type:'guest', name:'게스트', memberships:[] };
+  saveSession(state.auth);
+  toast('게스트로 둘러보는 중 · 팀 탭만 이용할 수 있어요');
+  afterLogin_();
+}
+function doOwnerLogin(){
+  var id=(gv_('ow_id')||'').trim(), pw=gv_('ow_pw');
+  if(!id || !pw){ toast('아이디와 비밀번호를 입력하세요'); return; }
+  authBtnBusy_(true);
+  API.run('ownerLogin', id, pw).then(finishAuth_).catch(function(){ authBtnBusy_(false); toast('로그인에 실패했습니다'); });
+}
+function doOwnerSignup(){
+  var nm=(gv_('su_name')||'').trim(), id=(gv_('su_id')||'').trim(), pw=gv_('su_pw'), pw2=gv_('su_pw2');
+  if(!nm || !id || !pw){ toast('모든 항목을 입력하세요'); return; }
+  if(String(pw).length<4){ toast('비밀번호는 4자 이상이어야 합니다'); return; }
+  if(pw!==pw2){ toast('비밀번호가 일치하지 않습니다'); return; }
+  authBtnBusy_(true);
+  API.run('ownerSignup', id, pw, nm).then(function(r){ if(r&&r.ok) toast(nm+'님, 가입을 환영합니다'); finishAuth_(r); }).catch(function(){ authBtnBusy_(false); toast('가입에 실패했습니다'); });
+}
+function doMemberLogin(){
+  var cid = inviteClubId() || state.memberLoginClub || '';
+  if(!cid){ toast('팀을 선택하세요'); return; }
   var name = loginPid;
-  if(!name){
-    var q = ((document.getElementById('au_search')||{}).value||'').trim();
-    var hit = loginPeople_().filter(function(p){ return p.name===q; });
-    if(hit.length===1) name = hit[0].name;
-  }
-  var pw = (document.getElementById('au_pw')||{}).value;
-  if(!name){ toast('이름을 입력 후 목록에서 선택하세요'); return; }
+  if(!name){ var q=(gv_('au_search')||'').trim(); var hit=loginPeople_().filter(function(p){ return p.name===q; }); if(hit.length===1) name=hit[0].name; }
+  var pw = gv_('au_pw');
+  if(!name){ toast('이름을 목록에서 선택하세요'); return; }
   if(!pw){ toast('비밀번호를 입력하세요'); return; }
-  var btn=document.querySelector('.auth-btn'); if(btn){btn.textContent='확인 중...';btn.disabled=true;}
-  API.run('login', name, pw).then(function(r){
-    if(!r || !r.ok){ if(btn){btn.textContent='로그인';btn.disabled=false;} toast((r&&r.error)||'로그인 실패'); return; }
-    state.auth = {name:r.name, memberships:r.memberships||[], token:r.token};
-    saveSession(state.auth);
-    toast(r.name+'님 환영합니다');
-    afterLogin_();
-    if(r.firstLogin){ setTimeout(function(){ openMyPw(true); }, 700); }
-  }).catch(function(){ if(btn){btn.textContent='로그인';btn.disabled=false;} toast('로그인에 실패했습니다'); });
+  authBtnBusy_(true);
+  API.run('memberLogin', cid, name, pw).then(function(r){ if(r&&r.ok) toast(r.name+'님 환영합니다'); finishAuth_(r); }).catch(function(){ authBtnBusy_(false); toast('로그인에 실패했습니다'); });
+}
+function kakaoBackendBase_(){ return (KAKAO_BACKEND||'').replace(/\/+$/, ''); }
+function doKakaoAuth(){
+  var base = kakaoBackendBase_();
+  if(!base){ toast('카카오 로그인 준비 중입니다 (백엔드 URL 설정 필요)'); return; }
+  authBtnBusy_(true);
+  // 백엔드가 카카오 OAuth로 리다이렉트 → 콜백 후 앱으로 #ks=... 붙여 복귀
+  location.href = base + '/api/kakao/login';
+}
+/* 카카오 로그인 복귀 처리: 백엔드가 앱 URL 해시에 실어준 서명 티켓(ks)을 백엔드에 되물어 프로필 획득 */
+function handleKakaoReturn_(){
+  var h = location.hash || '';
+  var m = h.match(/[#&]ks=([^&]+)/);
+  if(!m) return false;
+  var ks = decodeURIComponent(m[1]);
+  try{ history.replaceState(null, '', location.pathname + location.search); }catch(e){ location.hash=''; }
+  var base = kakaoBackendBase_();
+  toast('카카오 로그인 확인 중...');
+  fetch(base + '/api/kakao/session', {
+    method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ks:ks})
+  }).then(function(r){ return r.json(); }).then(function(res){
+    if(!res || !res.ok){ toast((res&&res.error)||'카카오 로그인에 실패했어요'); applyAppHeader(); showLogin(); return; }
+    return API.run('ownerKakao', String(res.kakaoId), res.name||'카카오사용자').then(function(r){
+      if(r && r.ok){ toast(r.name+'님 환영합니다'); finishAuth_(r); }
+      else { toast((r&&r.error)||'로그인 실패'); applyAppHeader(); showLogin(); }
+    });
+  }).catch(function(){ toast('카카오 로그인에 실패했어요'); applyAppHeader(); showLogin(); });
+  return true;
+}
+function copyInviteLink(){
+  var cid = state.activeClubId; if(!cid){ toast('먼저 팀을 선택하세요'); return; }
+  var url = location.origin + location.pathname + '?t=' + encodeURIComponent(cid);
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(function(){ toast('초대 링크를 복사했어요'); }, function(){ prompt('아래 링크를 복사해 팀원에게 보내세요', url); });
+  } else { prompt('아래 링크를 복사해 팀원에게 보내세요', url); }
+}
+function guestToLogin(){
+  toast('로그인 화면으로 이동합니다');
+  logout();
 }
 function logout(){
   clearSession(); state.auth=null;
   state.activeClubId=null; ACTIVE_CLUB=null; window.ACTIVE_CLUB=null;
-  state.players=[]; state.matches=[]; state.loginNames=null;
+  state.players=[]; state.matches=[]; state.loginNames=null; state.memberLoginClub=null;
   closeSheet();
   applyAppHeader();
   showLogin();
@@ -3548,6 +3747,51 @@ function fsResetPw(pid){
   mates.forEach(function(x){ x.pwHash=''; b.set(db.collection('members').doc(String(x.id)), {pwHash:''}, {merge:true}); });
   return b.commit().then(function(){ return {ok:true}; });
 }
+/* 구단주/팀원 인증 (해시 저장) */
+function fsOwnerSignup(oid, pw, nm){
+  oid=String(oid||'').trim(); pw=String(pw||''); nm=String(nm||'').trim();
+  if(!oid||!pw||!nm) return Promise.resolve({ok:false, error:'모든 항목을 입력하세요'});
+  if(pw.length<4) return Promise.resolve({ok:false, error:'비밀번호는 4자 이상이어야 합니다'});
+  if((DB.owners||[]).some(function(o){return o.provider==='app' && String(o.ownerId).toLowerCase()===oid.toLowerCase();})) return Promise.resolve({ok:false, error:'이미 사용 중인 아이디입니다'});
+  var id='own_'+Date.now();
+  return fsHash(pw).then(function(h){
+    var od={id:id, ownerId:oid, name:nm, pwHash:h, provider:'app', createdAt:new Date().toISOString()};
+    DB.owners.push(od);
+    return db.collection('owners').doc(id).set(od, {merge:true}).then(function(){
+      return {ok:true, type:'owner', ownerId:id, name:nm, memberships:ownerMemberships_(id), token:'fs.own.'+id};
+    });
+  });
+}
+function fsOwnerLogin(oid, pw){
+  oid=String(oid||'').trim();
+  var o=(DB.owners||[]).filter(function(o){return o.provider==='app' && String(o.ownerId).toLowerCase()===oid.toLowerCase();})[0];
+  if(!o) return Promise.resolve({ok:false, error:'구단주 계정을 찾을 수 없습니다'});
+  return fsHash(pw).then(function(h){
+    if(h!==o.pwHash) return {ok:false, error:'비밀번호가 올바르지 않습니다'};
+    return {ok:true, type:'owner', ownerId:o.id, name:o.name, memberships:ownerMemberships_(o.id), token:'fs.own.'+o.id};
+  });
+}
+function fsOwnerKakao(kid, knm){
+  kid=String(kid||''); knm=String(knm||'카카오사용자');
+  var o=(DB.owners||[]).filter(function(o){return o.provider==='kakao' && String(o.kakaoId)===kid;})[0];
+  if(o) return Promise.resolve({ok:true, type:'owner', ownerId:o.id, name:o.name, memberships:ownerMemberships_(o.id), token:'fs.own.'+o.id});
+  var id='own_k'+Date.now();
+  var od={id:id, ownerId:'kakao_'+kid, name:knm, provider:'kakao', kakaoId:kid, createdAt:new Date().toISOString()};
+  DB.owners.push(od);
+  return db.collection('owners').doc(id).set(od, {merge:true}).then(function(){
+    return {ok:true, type:'owner', ownerId:id, name:knm, memberships:ownerMemberships_(id), token:'fs.own.'+id};
+  });
+}
+function fsMemberLogin(cid, name, pw){
+  var m=(DB.players||[]).filter(function(x){return x.clubId===cid && x.name===name;})[0];
+  if(!m) return Promise.resolve({ok:false, error:'팀원을 찾을 수 없습니다'});
+  var stored=m.pwHash||'';
+  var check = stored ? fsHash(pw).then(function(h){return h===stored;}) : Promise.resolve(String(pw)==='jemiro');
+  return check.then(function(good){
+    if(!good) return {ok:false, error:'비밀번호가 올바르지 않습니다'};
+    return {ok:true, type:'member', name:m.name, clubId:cid, memberships:[{clubId:cid, playerId:m.id, role:(m.role==='임원'?'임원':'팀원')}], firstLogin:!stored, token:'fs.mem.'+m.id};
+  });
+}
 
 /* Firestore → 메모리(DB) 로드 */
 function fsColl(name){ return db.collection(name).get().then(function(snap){ var a=[]; snap.forEach(function(d){ var o=d.data()||{}; a.push(o); }); return a; }); }
@@ -3556,11 +3800,11 @@ function fsLoadAll(){
     fsColl('members'), fsColl('matches'), fsColl('squads'), fsColl('squadMembers'),
     fsColl('squadNotes'), fsColl('playerStats'), fsColl('attendance'), fsColl('polls'),
     fsColl('votes'), fsColl('posts'), db.collection('config').doc('app').get(),
-    fsColl('clubs'), fsColl('extraRequests'), fsColl('matchRoster'), fsColl('noteComments')
+    fsColl('clubs'), fsColl('extraRequests'), fsColl('matchRoster'), fsColl('noteComments'), fsColl('owners')
   ]).then(function(r){
     DB.players=r[0]; DB.matches=r[1]; DB.squads=r[2]; DB.members=r[3];
     DB.notes=r[4]; DB.stats=r[5]; DB.attendance=r[6]; DB.polls=r[7];
-    DB.votes=r[8]; DB.posts=r[9]; DB.clubs=r[11]||[]; DB.extras=r[12]||[]; DB.matchRoster=r[13]||[]; DB.noteComments=r[14]||[];
+    DB.votes=r[8]; DB.posts=r[9]; DB.clubs=r[11]||[]; DB.extras=r[12]||[]; DB.matchRoster=r[13]||[]; DB.noteComments=r[14]||[]; DB.owners=r[15]||[];
     var cfg = (r[10] && r[10].exists) ? r[10].data() : {};
     DB.config = { checkinRadiusM: (cfg.checkinRadiusM!=null?cfg.checkinRadiusM:100), lateThresholdMin: (cfg.lateThresholdMin!=null?cfg.lateThresholdMin:0) };
     for(var k in cfg){ if(k!=='staffPw'&&k!=='memberPw') DB.config[k]=cfg[k]; }
@@ -3571,6 +3815,11 @@ function fsLoadAll(){
 FS.run = function(fn, args){
   return FS.ready.then(function(){
     if(fn==='login') return fsLogin(args[0], args[1]);
+    if(fn==='ownerSignup') return fsOwnerSignup(args[0], args[1], args[2]);
+    if(fn==='ownerLogin') return fsOwnerLogin(args[0], args[1]);
+    if(fn==='ownerKakao') return fsOwnerKakao(args[0], args[1]);
+    if(fn==='memberLogin') return fsMemberLogin(args[0], args[1], args[2]);
+    if(fn==='getTeamMembers') return Promise.resolve(mockHandler('getTeamMembers', args));
     if(fn==='setMyPassword') return fsSetMyPassword(args[0], args[1], args[2]);
     if(fn==='resetMemberPassword') return fsResetPw(args[0]);
     if(fn==='setConfig'){ var rc=mockHandler(fn, args); fsSyncConfig(); return rc; }
@@ -3624,8 +3873,9 @@ if(APP_BG){ document.documentElement.style.setProperty('--hero-img', 'url("'+APP
 FS.init();
 API.run('bootstrap').then(function(b){
   if(b){ if(b.config) state.cfg=b.config; state.clubs=b.clubs||[]; }
+  if(handleKakaoReturn_()){ return; }
   var sess = loadSession();
-  if(sess && sess.name && sess.memberships){
+  if(sess && (sess.type || (sess.name && sess.memberships))){
     state.auth = sess;
     afterLogin_();
   } else {
@@ -3635,15 +3885,20 @@ API.run('bootstrap').then(function(b){
 
 /* 로그인 후: 접근 가능한 팀이 1개면 자동 입장, 아니면 팀 탭 */
 function afterLogin_(){
-  var ids = myClubIds();
   document.getElementById('authScreen').style.display='none';
   document.getElementById('tabbar').style.display='flex';
+  if(isGuest()){
+    state.activeClubId=null; ACTIVE_CLUB=null; window.ACTIVE_CLUB=null;
+    state.screen='club'; applyAppHeader(); render(); return;
+  }
+  var ids = myClubIds();
   var last = state.auth && state.auth.lastClub;
   if(last && canEnterClub(last)){ enterClub(last); }
   else if(ids.length===1){ enterClub(ids[0]); }
   else { state.activeClubId=null; ACTIVE_CLUB=null; state.screen='club'; applyAppHeader(); render(); }
 }
 function enterClub(clubId){
+  if(isGuest()){ toast('게스트는 팀에 입장할 수 없어요. 구단주·팀원 로그인 후 이용하세요.'); return; }
   if(!canEnterClub(clubId)){ toast('가입되지 않은 팀입니다'); return; }
   state.activeClubId = clubId; ACTIVE_CLUB = clubId; window.ACTIVE_CLUB = clubId;
   state.auth.lastClub = clubId; saveSession(state.auth);
