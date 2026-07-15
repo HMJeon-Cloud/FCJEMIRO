@@ -236,13 +236,13 @@
   }
   .token.drag{z-index:5;cursor:grabbing;}
   .token .t-num{
-    width:34px;height:34px;border-radius:50%;display:flex;align-items:center;justify-content:center;
-    font-weight:700;font-size:15px;color:#fff;border:2px solid #fff;
+    min-width:34px;height:34px;padding:0 4px;border-radius:17px;display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:12.5px;letter-spacing:.02em;color:#fff;border:2px solid #fff;
     box-shadow:0 3px 8px rgba(0,0,0,.35);background:var(--ink);
   }
   .token .t-name{
     font-size:9.5px;font-weight:700;color:#fff;background:rgba(20,18,26,.72);
-    padding:1px 5px;border-radius:5px;white-space:nowrap;max-width:64px;overflow:hidden;text-overflow:ellipsis;
+    padding:1px 5px;border-radius:5px;white-space:nowrap;max-width:72px;overflow:hidden;text-overflow:ellipsis;
   }
   .token.drag .t-num{transform:scale(1.12);}
   .pos-GK .t-num{background:#E0A400;}
@@ -260,6 +260,7 @@
   .rst-postag{font-size:13px;color:var(--steel);width:82px;text-align:center;}
   .rst-x{background:none;border:none;color:var(--steel-soft);font-size:20px;cursor:pointer;padding:0 2px;line-height:1;}
   .rst-search{width:100%;padding:9px 12px;border:1.5px solid var(--line-strong);border-radius:10px;font-family:inherit;font-size:14px;margin:2px 0 6px;}
+  .sheet-body textarea{width:100%;padding:11px 12px;border:1.5px solid var(--line-strong);border-radius:11px;font-family:inherit;font-size:14px;line-height:1.5;resize:vertical;box-sizing:border-box;background:#fff;color:var(--ink);}
   .att-list{margin-top:2px;}
   .att-row{display:flex;align-items:center;gap:10px;padding:8px 2px;border-bottom:1px solid var(--line);}
   .att-num{font-weight:700;font-size:15px;width:30px;text-align:center;color:var(--ink);}
@@ -270,6 +271,21 @@
   .att-b.p.on{background:var(--ok);color:#fff;border-color:var(--ok);}
   .att-b.l.on{background:#E0A400;color:#fff;border-color:#E0A400;}
   .att-b.a.on{background:var(--red);color:#fff;border-color:var(--red);}
+  .mijeong{font-size:.6em;letter-spacing:0;color:var(--steel-soft);font-family:'Pretendard';font-weight:600;}
+  .att-tag{font-size:12px;font-weight:700;padding:5px 11px;border-radius:8px;}
+  .att-tag.p{background:rgba(30,158,106,.14);color:var(--ok);}
+  .att-tag.l{background:rgba(224,164,0,.16);color:#B8860B;}
+  .att-tag.a{background:rgba(225,19,48,.12);color:var(--red);}
+  .att-tag.n{background:var(--paper);color:var(--steel-soft);}
+  .cmt-row{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-top:1px dashed var(--line);}
+  .cmt-body{flex:1;font-size:12.5px;color:var(--ink-soft);line-height:1.5;}
+  .cmt-who{font-size:11px;font-weight:700;color:var(--steel);margin-right:5px;}
+  .cmt-x{background:none;border:none;color:var(--steel-soft);font-size:16px;cursor:pointer;line-height:1;}
+  .note-actions{display:flex;gap:8px;margin-top:8px;}
+  .note-actions button{background:var(--paper);border:1px solid var(--line-strong);border-radius:8px;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--steel);padding:5px 11px;cursor:pointer;}
+  .note-cmt-input{display:flex;gap:6px;margin-top:8px;}
+  .note-cmt-input input{flex:1;padding:8px 10px;border:1.5px solid var(--line-strong);border-radius:9px;font-family:inherit;font-size:13px;}
+  .note-cmt-input button{background:var(--red);color:#fff;border:none;border-radius:9px;font-family:inherit;font-weight:700;font-size:13px;padding:0 14px;cursor:pointer;}
 
   .match{padding:14px;border-radius:15px;background:var(--card);border:1px solid var(--line);box-shadow:var(--shadow-sm);margin-bottom:10px;}
   .match-top{display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:var(--steel);font-weight:600;}
@@ -650,7 +666,8 @@ var DB = {
   ],
   clubs: [],
   extras: [],
-  matchRoster: []
+  matchRoster: [],
+  noteComments: []
 };
 /* ===== Firebase / Firestore ===== */
 var FIREBASE_CONFIG = {
@@ -774,8 +791,12 @@ function mockHandler(fn, a){
     DB.members.forEach(function(x){ if(x.squadId===a[0] && x.playerId===a[1]){ x.x=a[2]; x.y=a[3]; if(a[4]) x.position=a[4]; } });
     return buildSquadDetail_(a[0]);
   }
-  if(fn==='setSquadPos'){ // 위치 유지, 포지션명만 변경
-    DB.members.forEach(function(x){ if(x.squadId===a[0] && x.playerId===a[1]) x.position=a[2]; });
+  if(fn==='setSquadPos'){ // 포지션 변경 (미편성→맵 배치, 배치됨→위치 유지)
+    DB.members.forEach(function(x){ if(x.squadId===a[0] && x.playerId===a[1]){
+      x.position=a[2];
+      if(!a[2]){ x.x=null; x.y=null; }
+      else if(x.x==null || x.y==null){ var n=DB.members.filter(function(y){return y.squadId===a[0] && y.position===a[2];}).length; var dd=posDefaultXY(a[2], n); x.x=dd.x; x.y=dd.y; }
+    } });
     return buildSquadDetail_(a[0]);
   }
   if(fn==='addGuest'){ // squadId, name, pos
@@ -788,6 +809,8 @@ function mockHandler(fn, a){
   }
   if(fn==='removeSquadMember'){ DB.members=DB.members.filter(function(x){return !(x.squadId===a[0] && x.playerId===a[1]);}); return buildSquadDetail_(a[0]); }
   if(fn==='addNote'){ DB.notes.push({id:'n'+Date.now(), squadId:a[0], phase:a[1], scope:a[2], body:a[3]}); return buildSquadDetail_(a[0]); }
+  if(fn==='addNoteComment'){ DB.noteComments.push({id:'nc'+Date.now(), noteId:a[0], author:a[1]||'', authorId:a[2]||'', body:a[3]||'', createdAt:new Date().toISOString()}); var sq=(DB.notes.filter(function(x){return x.id===a[0];})[0]||{}).squadId; return buildSquadDetail_(sq); }
+  if(fn==='deleteNoteComment'){ var sq2=(DB.notes.filter(function(x){return x.id===(DB.noteComments.filter(function(c){return c.id===a[0];})[0]||{}).noteId;})[0]||{}).squadId; DB.noteComments=DB.noteComments.filter(function(c){return c.id!==a[0];}); return buildSquadDetail_(sq2); }
   if(fn==='deleteNote'){ var nid=a[0]; var sid3=(DB.notes.filter(function(x){return x.id===nid;})[0]||{}).squadId; DB.notes=DB.notes.filter(function(x){return x.id!==nid;}); return buildSquadDetail_(sid3); }
   // --- records ---
   if(fn==='getRecordBundle'){
@@ -811,10 +834,11 @@ function mockHandler(fn, a){
     arr.forEach(function(s){ if((s.goals||0)>0 || (s.assists||0)>0) DB.stats.push({matchId:mid4, playerId:s.playerId, goals:s.goals||0, assists:s.assists||0}); });
     return mockHandler('getRecordBundle',[]);
   }
-  if(fn==='applyVotersToMatch'){ // pollId, option, matchId — 경기 참석자 명단 설정(덮어씀)
+  if(fn==='applyVotersToMatch'){ // pollId, option, matchId — 경기 참석자 명단 설정(덮어씀) + 자동 출석
     var mid=a[2]; DB.matchRoster=DB.matchRoster.filter(function(x){return x.matchId!==mid;});
     var vp={}; DB.votes.filter(function(v){return v.pollId===a[0] && v.choice===a[1];}).forEach(function(v){ vp[v.playerId]=1; });
-    Object.keys(vp).forEach(function(pl){ DB.matchRoster.push({clubId:AC, matchId:mid, playerId:pl}); });
+    DB.attendance=DB.attendance.filter(function(x){return x.matchId!==mid;});   // 규칙 자동: 명단=출석 기본
+    Object.keys(vp).forEach(function(pl){ DB.matchRoster.push({clubId:AC, matchId:mid, playerId:pl}); DB.attendance.push({matchId:mid, playerId:pl, status:'present'}); });
     return {ok:true, count:Object.keys(vp).length};
   }
   if(fn==='clearMatchRoster'){ DB.matchRoster=DB.matchRoster.filter(function(x){return x.matchId!==a[0];}); return {ok:true}; }
@@ -924,11 +948,7 @@ function pollStatus_(p){
 /* 스쿼드에 선수 편성 (선호 포지션 1순위, 없으면 DF). 이미 있으면 건너뜀 */
 function addPlayerToSquad_(sid, playerId){
   if(DB.members.some(function(x){return x.squadId===sid && x.playerId===playerId;})) return false;
-  var pl = DB.players.filter(function(p){return p.id===playerId;})[0];
-  var pos = (pl && pl.positions && pl.positions.length) ? pl.positions[0] : 'DF';
-  var nInLine = DB.members.filter(function(x){return x.squadId===sid && x.position===pos;}).length;
-  var dd = posDefaultXY(pos, nInLine);
-  DB.members.push({squadId:sid, playerId:playerId, position:pos, x:dd.x, y:dd.y});
+  DB.members.push({squadId:sid, playerId:playerId, position:'', x:null, y:null});   // 미편성(맵 미표기)
   return true;
 }
 function buildPollDetail_(pollId, viewerId){
@@ -979,14 +999,19 @@ function buildSquadDetail_(squadId){
   var raw = DB.members.filter(function(x){return x.squadId===squadId;});
   var gi=0;
   var members = raw.map(function(sm){
-    var d = (sm.x==null||sm.y==null) ? posDefaultXY(sm.position,0) : {x:sm.x, y:sm.y};
-    if(sm.guest){ gi++; return {playerId:sm.playerId, guest:true, num:'G'+gi, gnum:gi, name:(sm.gname||('Guest'+gi)), position:sm.position, x:d.x, y:d.y}; }
+    var assigned = !!sm.position;
+    var d = !assigned ? {x:null,y:null} : ((sm.x==null||sm.y==null) ? posDefaultXY(sm.position,0) : {x:sm.x, y:sm.y});
+    if(sm.guest){ gi++; return {playerId:sm.playerId, guest:true, num:'G'+gi, gnum:gi, name:(sm.gname||('Guest'+gi)), position:sm.position||'', x:d.x, y:d.y}; }
     var p = DB.players.filter(function(x){return x.id===sm.playerId;})[0] || {num:'?',name:'(삭제됨)'};
-    return {playerId:sm.playerId, num:p.num, name:p.name, position:sm.position, x:d.x, y:d.y};
+    return {playerId:sm.playerId, num:p.num, name:p.name, position:sm.position||'', x:d.x, y:d.y};
   });
-  // 정렬: 일반 선수(번호순, 미정 아래) → 게스트
   members.sort(function(a,b){ if(a.guest!==b.guest) return a.guest?1:-1; if(a.guest) return a.gnum-b.gnum; return numSort(a,b); });
-  var notes = DB.notes.filter(function(x){return x.squadId===squadId;});
+  var cmts = DB.noteComments||[];
+  var notes = DB.notes.filter(function(x){return x.squadId===squadId;}).map(function(n){
+    var c = cmts.filter(function(x){return x.noteId===n.id;}).sort(function(a,b){return String(a.createdAt).localeCompare(String(b.createdAt));})
+                .map(function(x){ return {id:x.id, author:x.author, authorId:x.authorId, body:x.body, createdAt:x.createdAt}; });
+    return {id:n.id, squadId:n.squadId, phase:n.phase, scope:n.scope, body:n.body, comments:c};
+  });
   return {squad:squad, members:members, notes:notes};
 }
 
@@ -1200,6 +1225,10 @@ function initPitchDrag(){
       tok.style.left = (x*100)+'%';
       tok.style.top = (y*100)+'%';
       tok._x = x; tok._y = y; moved=true;
+      if(!tok.getAttribute('data-guest')){   // 이동 중 실시간 포지션 표기
+        var lp = posFromXY(x,y);
+        var nn = tok.querySelector('.t-num'); if(nn && nn.textContent!==lp){ nn.textContent = lp; tok.className = 'token pos-'+lp+' drag'; }
+      }
     });
     var end = function(){
       if(!dragging) return;
@@ -1243,7 +1272,7 @@ function playerCard(p){
     ? '<div class="pos-tags">'+p.positions.map(function(pp){return '<span class="pos-tag">'+pp+'</span>';}).join('')+'</div>'
     : '';
   return '<div class="player" onclick="openPlayerForm(\''+p.id+'\')">'
-    + '<div class="num oswald">'+numLabel(p.num)+'</div>'
+    + '<div class="num oswald">'+numDisp(p.num)+'</div>'
     + '<div class="meta"><div class="pname">'+p.name+posHtml+'</div><div class="sub">'+(subHtml||'추가 정보 없음')+'</div></div>'
     + '<div class="size-badge">'+p.size+'</div></div>';
 }
@@ -1339,18 +1368,20 @@ function viewForm(){
   var sid = d.squad.id;
 
   var applyBtns = isAdmin() ? '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">'
-    + '<button class="btn-ghost" style="flex:1;min-width:30%;margin:0;" onclick="openApplyVoters(\''+sid+'\')">🗳️ 투표 인원 적용</button>'
+    + '<button class="btn-ghost" style="flex:1;min-width:30%;margin:0;" onclick="openApplyVoters(\''+sid+'\')">🗳️ 투표 적용</button>'
     + '<button class="btn-ghost" style="flex:1;min-width:30%;margin:0;" onclick="loadAllToSquadGo(\''+sid+'\')">👥 전체 팀원</button>'
     + '<button class="btn-ghost" style="flex:1;min-width:30%;margin:0;" onclick="openGuestForm(\''+sid+'\')">➕ 게스트</button>'
     + '</div>' : '';
 
-  var tokens = d.members.map(function(mem){
-    return '<div class="token pos-'+(mem.guest?'guest':mem.position)+'" data-pid="'+mem.playerId+'" style="left:'+(mem.x*100)+'%;top:'+(mem.y*100)+'%;">'
-      + '<span class="t-num oswald">'+(mem.guest?mem.num:numTok(mem.num))+'</span><span class="t-name">'+esc(mem.name)+'</span></div>';
+  var tokens = d.members.filter(function(m){ return m.position; }).map(function(mem){
+    var label = (mem.guest?mem.num:numTok(mem.num)) + ' ' + esc(mem.name);
+    return '<div class="token pos-'+(mem.guest?'guest':mem.position)+'" data-pid="'+mem.playerId+'"'+(mem.guest?' data-guest="1"':'')+' style="left:'+(mem.x*100)+'%;top:'+(mem.y*100)+'%;">'
+      + '<span class="t-num oswald">'+esc(mem.position)+'</span><span class="t-name">'+label+'</span></div>';
   }).join('');
+  var assignedN = d.members.filter(function(m){return m.position;}).length;
 
   var head = '<div class="eyebrow" style="display:flex;justify-content:space-between;align-items:center;">'
-    + '<span>'+esc(d.squad.name)+' · '+d.members.length+'명</span>'
+    + '<span>'+esc(d.squad.name)+' · 맵 '+assignedN+' / 전체 '+d.members.length+'명</span>'
     + (isAdmin()?'<span style="font-size:11px;letter-spacing:0;">'
         + '<a style="color:var(--steel-soft);cursor:pointer;" onclick="openSquadForm(\''+sid+'\')">이름수정</a>'
         + ' · <a style="color:var(--red);cursor:pointer;" onclick="deleteSquadConfirm(\''+sid+'\',\''+esc(d.squad.name).replace(/'/g,'')+'\')">삭제</a></span>':'')
@@ -1363,16 +1394,16 @@ function viewForm(){
     +   '<rect x="28" y="2" width="44" height="15"/><rect x="40" y="2" width="20" height="6"/>'
     +   '<rect x="28" y="115" width="44" height="15"/><rect x="40" y="124" width="20" height="6"/>'
     +   '</g><circle cx="50" cy="66" r="1" fill="rgba(255,255,255,0.6)"/></svg>'
-    + '<div class="pitch-label">우리 진영 ↓</div>' + tokens + '</div>';
+    + '<div class="pitch-label">우리 진영 ↓</div>' + tokens + '</div>'+ (isAdmin()&&assignedN>11?'<p style="font-size:11.5px;color:var(--red);margin:8px 2px 0;font-weight:600;">⚠️ 맵에 '+assignedN+'명 배치됨 · 베스트11은 11명입니다.</p>':'');
 
   // #6 인라인 명단 + 검색
   var q = (state.formRosterQ||'').trim().toLowerCase();
   var rows = d.members.filter(function(mem){ return !q || String(mem.name).toLowerCase().indexOf(q)>=0 || String(mem.num).toLowerCase().indexOf(q)>=0; }).map(function(mem){
-    var opts = POS.map(function(ps){ return '<option value="'+ps[0]+'"'+(mem.position===ps[0]?' selected':'')+'>'+ps[0]+'</option>'; }).join('');
-    var sel = isAdmin() ? '<select class="rst-pos" onchange="setMemberPosOnly(\''+mem.playerId+'\',this.value)">'+opts+'</select>' : '<span class="rst-postag">'+esc(mem.position)+'</span>';
+    var opts = '<option value=""'+(mem.position?'':' selected')+'>미편성</option>'+POS.map(function(ps){ return '<option value="'+ps[0]+'"'+(mem.position===ps[0]?' selected':'')+'>'+ps[0]+'</option>'; }).join('');
+    var sel = isAdmin() ? '<select class="rst-pos" onchange="setMemberPosOnly(\''+mem.playerId+'\',this.value)">'+opts+'</select>' : '<span class="rst-postag">'+(mem.position?esc(mem.position):'미편성')+'</span>';
     var rm = isAdmin() ? '<button class="rst-x" onclick="removeMemberConfirm(\''+mem.playerId+'\',\''+esc(mem.name).replace(/'/g,'')+'\')">×</button>' : '';
     return '<div class="rst-row">'
-      + '<span class="rst-num oswald'+(mem.guest?' guest':'')+'">'+(mem.guest?mem.num:numLabel(mem.num))+'</span>'
+      + '<span class="rst-num oswald'+(mem.guest?' guest':'')+'">'+(mem.guest?mem.num:numDisp(mem.num))+'</span>'
       + '<span class="rst-name">'+esc(mem.name)+(mem.guest?' <span class="rst-g">게스트</span>':'')+'</span>'
       + sel + rm + '</div>';
   }).join('');
@@ -1419,12 +1450,60 @@ function addGuestGo(sid){
 /* #5 스쿼드 요청사항 (전체 + 선수별) */
 function squadReqSection(d){
   var notes=(d.notes||[]);
+  var open=state.openNoteId;
   var rows=notes.length ? notes.map(function(n){
     var who = n.scope==='전체' ? '전체' : n.scope;
-    return '<div class="note-card" '+(isAdmin()?'onclick="deleteNoteConfirm(\''+n.id+'\')"':'')+'><div class="nh">'+esc(who)+'</div><p>'+esc(n.body)+'</p></div>';
+    var cmts=(n.comments||[]);
+    var cmtList = (open===n.id) ? cmts.map(function(c){
+      var canDel = isAdmin() || (state.auth && c.authorId===authId());
+      return '<div class="cmt-row"><div class="cmt-body"><span class="cmt-who">'+esc(c.author||'')+'</span>'+esc(c.body)+'</div>'
+        + (canDel?'<button class="cmt-x" onclick="delNoteComment(\''+c.id+'\')">×</button>':'')+'</div>';
+    }).join('') + (state.auth ? '<div class="note-cmt-input"><input id="cmt_'+n.id+'" type="text" placeholder="댓글 입력" onkeydown="if(event.key===\'Enter\')addNoteCommentGo(\''+n.id+'\')"><button onclick="addNoteCommentGo(\''+n.id+'\')">등록</button></div>' : '') : '';
+    var actions = '<div class="note-actions">'
+      + '<button onclick="toggleNoteComments(\''+n.id+'\')">💬 댓글'+(cmts.length?' '+cmts.length:'')+'</button>'
+      + (isAdmin()?'<button style="color:var(--red);border-color:var(--red);" onclick="deleteNoteConfirm(\''+n.id+'\')">삭제</button>':'')
+      + '</div>';
+    return '<div class="note-card"><div class="nh">'+esc(who)+'</div><p>'+esc(n.body)+'</p>'+actions+cmtList+'</div>';
   }).join('') : '<p style="font-size:12.5px;color:var(--steel-soft);margin:0 0 8px;">등록된 요청사항이 없습니다.</p>';
   return '<div class="section"><div class="eyebrow">요청사항</div>'+rows
     + (isAdmin()?'<button class="btn-ghost" onclick="openSquadNoteForm()">＋ 요청사항 추가</button>':'')+'</div>';
+}
+function toggleNoteComments(nid){ state.openNoteId = (state.openNoteId===nid?null:nid); render(); }
+function addNoteCommentGo(nid){
+  if(!state.auth){ toast('로그인이 필요합니다'); return; }
+  var el=document.getElementById('cmt_'+nid); var body=el?el.value.trim():'';
+  if(!body){ toast('댓글을 입력하세요'); return; }
+  var sid=state.currentSquadId;
+  API.run('addNoteComment', nid, state.auth.name, authId(), body).then(function(res){
+    if(res && res.squad){ SQUAD_CACHE[sid]=res; state.squadDetail=res; state.openNoteId=nid; render(); }
+  }).catch(function(){ toast('댓글 등록 실패'); });
+}
+function delNoteComment(cid){
+  var sid=state.currentSquadId;
+  API.run('deleteNoteComment', cid).then(function(res){
+    if(res && res.squad){ SQUAD_CACHE[sid]=res; state.squadDetail=res; render(); }
+  }).catch(function(){ toast('삭제 실패'); });
+}
+function deleteNoteConfirm(nid){
+  if(!requireAdmin()) return;
+  var html='<div class="grabber"></div>'
+   + '<div class="sheet-head"><h3>요청사항 삭제</h3><button class="x" onclick="closeSheet()">✕</button></div>'
+   + '<div class="sheet-body">'
+   +   '<p style="font-size:14px;color:var(--steel);margin:0 0 16px;line-height:1.6;">이 요청사항을 삭제하시겠습니까?</p>'
+   +   '<div style="display:flex;gap:9px;">'
+   +     '<button class="btn-ghost" style="flex:1;margin:0;" onclick="closeSheet()">아니오</button>'
+   +     '<button class="btn-primary btn-danger" style="flex:1;" onclick="doDeleteNote(\''+nid+'\')">예, 삭제</button>'
+   +   '</div>'
+   + '</div>';
+  showSheet(html);
+}
+function doDeleteNote(nid){
+  closeSheet();
+  var sid=state.currentSquadId;
+  API.run('deleteNote', nid).then(function(res){
+    if(res && res.squad){ SQUAD_CACHE[res.squad.id]=res; if(state.currentSquadId===res.squad.id){ state.squadDetail=res; render(); } }
+    toast('요청사항을 삭제했습니다');
+  }).catch(function(){ toast('삭제 실패'); });
 }
 function openSquadNoteForm(){
   if(!requireAdmin()) return;
@@ -1450,13 +1529,6 @@ function saveSquadNote(){
     if(res && res.squad){ SQUAD_CACHE[sid]=res; state.squadDetail=res; render(); }
     toast('요청사항을 등록했습니다');
   }).catch(function(){ toast('저장 실패'); });
-}
-function deleteNoteConfirm(nid){
-  if(!requireAdmin()) return;
-  var sid=state.currentSquadId;
-  API.run('deleteNote', nid).then(function(res){
-    if(res && res.squad){ SQUAD_CACHE[res.squad.id]=res; if(state.currentSquadId===res.squad.id){ state.squadDetail=res; render(); } }
-  }).catch(function(){ toast('삭제 실패'); });
 }
 function openSquadForm(id){
   if(!requireAdmin()) return;
@@ -1525,6 +1597,7 @@ function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;')
 function numOf(p){ var n=(p&&p.num); if(n===''||n==null||n==='미정') return Infinity; var v=Number(n); return isNaN(v)?Infinity:v; }
 function numSort(a,b){ return numOf(a)-numOf(b); }
 function numLabel(n){ if(n&&typeof n==='object') n=n.num; return (n===''||n==null||n==='미정')?'미정':n; }
+function numDisp(n){ if(n&&typeof n==='object') n=n.num; return (n===''||n==null||n==='미정')?'<span class="mijeong">미정</span>':n; }
 function numTok(n){ if(n&&typeof n==='object') n=n.num; return (n===''||n==null||n==='미정')?'–':n; }
 
 /* -------- 3. 기록 관리 (동작) -------- */
@@ -1754,11 +1827,14 @@ function attMarkingSection(m){
   }
   var rows = players.map(function(p){
     var st = attMap[p.id] || 'none';
-    var btn = function(val,label,cls){ return '<button class="att-b '+cls+(st===val?' on':'')+'" '+(isAdmin()?('onclick="markAtt(\''+p.id+'\',\''+val+'\')"'):'disabled')+'>'+label+'</button>'; };
-    var ctrls = full
-      ? btn('present','출석','p')+btn('late','지각','l')+btn('absent','불참','a')
-      : btn('present','출석','p');
-    return '<div class="att-row"><span class="att-num oswald">'+numLabel(p.num)+'</span><span class="att-name">'+esc(p.name)+'</span><span class="att-ctrls">'+ctrls+'</span></div>';
+    if(isAdmin()){
+      var btn = function(val,label,cls){ return '<button class="att-b '+cls+(st===val?' on':'')+'" onclick="markAtt(\''+p.id+'\',\''+val+'\')">'+label+'</button>'; };
+      var ctrls = full ? btn('present','출석','p')+btn('late','지각','l')+btn('absent','불참','a') : btn('present','출석','p');
+      return '<div class="att-row"><span class="att-num oswald">'+numDisp(p.num)+'</span><span class="att-name">'+esc(p.name)+'</span><span class="att-ctrls">'+ctrls+'</span></div>';
+    }
+    // 팀원: 상태 표시만 (선택 불가)
+    var tag = st==='present'?'<span class="att-tag p">출석</span>' : st==='late'?'<span class="att-tag l">지각</span>' : st==='absent'?'<span class="att-tag a">불참</span>' : '<span class="att-tag n">미정</span>';
+    return '<div class="att-row"><span class="att-num oswald">'+numDisp(p.num)+'</span><span class="att-name">'+esc(p.name)+'</span>'+tag+'</div>';
   }).join('');
   var head = full
     ? '<div class="eyebrow">출석 체크 · 참석 명단 '+players.length+'명</div><p style="font-size:11.5px;color:var(--steel-soft);margin:0 0 6px;">경기별 참석자가 지정되어 출석·지각·불참을 기록합니다.</p>'
@@ -1862,7 +1938,7 @@ function viewMore(){
   +   (isAdmin()?'<div class="list-row" style="cursor:pointer;" onclick="copyVenueLink(location.hostname)"><span class="nm" style="flex:1;">현재 도메인 <span style="font-size:10px;color:var(--steel-soft);">(카카오맵 등록용)</span></span><span class="val" style="font-size:11.5px;color:var(--steel);word-break:break-all;">'+esc(location.hostname)+'</span></div>':'')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">우리동네 축구왕 · v0.17</p>';
+  + '<p class="hint">우리동네 축구왕 · v0.18</p>';
 }
 function moreItem(id,title,sub,icon){
   return '<div class="player" style="margin-bottom:9px;" onclick="go(\''+id+'\')">'
@@ -3169,16 +3245,6 @@ function saveNote(phase){
     cacheSquad_(res); if(res.squad && state.currentSquadId===res.squad.id && state.screen==='form') render();
   }).catch(function(){ toast('저장 실패 · 새로고침'); });
 }
-function deleteNoteConfirm(id){
-  if(!requireAdmin()) return;
-  var d = state.squadDetail; if(!d) return;
-  d.notes = d.notes.filter(function(n){return n.id!==id;});
-  cacheSquad_(d); render(); toast('삭제되었습니다');
-  API.run('deleteNote', id).then(function(res){
-    cacheSquad_(res); if(res.squad && state.currentSquadId===res.squad.id && state.screen==='form') render();
-  }).catch(function(){ toast('저장 실패 · 새로고침'); });
-}
-
 /* ================= 경기 결과 + 선수 기록 입력 ================= */
 function onRecordMatchTap(matchId){
   if(isAdmin()) openResultForm(matchId);
@@ -3397,7 +3463,8 @@ var FS_MAP = {
   posts:      {coll:'posts',        id:function(x){return x.id;}},
   clubs:      {coll:'clubs',        id:function(x){return x.id;}},
   extras:     {coll:'extraRequests',id:function(x){return x.id;}},
-  matchRoster:{coll:'matchRoster',  id:function(x){return x.matchId+'__'+x.playerId;}}
+  matchRoster:{coll:'matchRoster',  id:function(x){return x.matchId+'__'+x.playerId;}},
+  noteComments:{coll:'noteComments', id:function(x){return x.id;}}
 };
 var WRITE_TOUCH = {
   addPlayer:['players'], updatePlayer:['players'], deletePlayer:['players','members'], setMemberRole:['players'],
@@ -3411,7 +3478,8 @@ var WRITE_TOUCH = {
   addPost:['posts'], togglePin:['posts'], deletePost:['posts'],
   addClub:['clubs','players'], updateClub:['clubs'], deleteClub:['clubs'], toggleClubFav:['clubs'],
   requestExtra:['extras'], approveExtra:['extras','members'], rejectExtra:['extras'],
-  applyVotersToMatch:['matchRoster'], clearMatchRoster:['matchRoster']
+  applyVotersToMatch:['matchRoster','attendance'], clearMatchRoster:['matchRoster'],
+  addNoteComment:['noteComments'], deleteNoteComment:['noteComments']
 };
 function fsClean(x){ var c={}; for(var k in x){ if(k==='pw'||k==='pwHash'||k==='_row') continue; c[k]=x[k]; } return c; }
 function fsSnapshot(keys){
@@ -3484,11 +3552,11 @@ function fsLoadAll(){
     fsColl('members'), fsColl('matches'), fsColl('squads'), fsColl('squadMembers'),
     fsColl('squadNotes'), fsColl('playerStats'), fsColl('attendance'), fsColl('polls'),
     fsColl('votes'), fsColl('posts'), db.collection('config').doc('app').get(),
-    fsColl('clubs'), fsColl('extraRequests'), fsColl('matchRoster')
+    fsColl('clubs'), fsColl('extraRequests'), fsColl('matchRoster'), fsColl('noteComments')
   ]).then(function(r){
     DB.players=r[0]; DB.matches=r[1]; DB.squads=r[2]; DB.members=r[3];
     DB.notes=r[4]; DB.stats=r[5]; DB.attendance=r[6]; DB.polls=r[7];
-    DB.votes=r[8]; DB.posts=r[9]; DB.clubs=r[11]||[]; DB.extras=r[12]||[]; DB.matchRoster=r[13]||[];
+    DB.votes=r[8]; DB.posts=r[9]; DB.clubs=r[11]||[]; DB.extras=r[12]||[]; DB.matchRoster=r[13]||[]; DB.noteComments=r[14]||[];
     var cfg = (r[10] && r[10].exists) ? r[10].data() : {};
     DB.config = { checkinRadiusM: (cfg.checkinRadiusM!=null?cfg.checkinRadiusM:100), lateThresholdMin: (cfg.lateThresholdMin!=null?cfg.lateThresholdMin:0) };
     for(var k in cfg){ if(k!=='staffPw'&&k!=='memberPw') DB.config[k]=cfg[k]; }
