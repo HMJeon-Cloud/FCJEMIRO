@@ -60,22 +60,23 @@
   /* ===== Header ===== */
   .topbar{
     position:relative;
-    background:linear-gradient(150deg,#17151D 0%,#111015 55%,#0D0C11 100%);
+    background:#111015;
     color:#fff;
     padding:16px 18px 18px;
     overflow:hidden;
     flex:0 0 auto;
     border-bottom:1px solid rgba(199,162,75,.35);
   }
-  .topbar::after{
-    content:"";position:absolute;top:0;right:-56px;bottom:0;width:190px;
-    background:linear-gradient(160deg,var(--red) 0%,var(--red-deep) 90%);
-    transform:skewX(-18deg);
-    opacity:.96;
-  }
+  /* 동축_배경: 헤더 전체를 덮는 배경 이미지 (이미지 오면 APP_BG 한 줄만 교체) */
   .topbar::before{
-    content:"";position:absolute;top:0;right:36px;bottom:0;width:3px;
-    background:var(--gold);transform:skewX(-18deg);opacity:.85;z-index:1;
+    content:"";position:absolute;inset:0;z-index:0;
+    background-image:var(--hero-img, linear-gradient(150deg,#17151D 0%,#111015 55%,#0D0C11 100%));
+    background-size:cover;background-position:center;
+  }
+  /* 글자 가독성용 어두운 오버레이 */
+  .topbar::after{
+    content:"";position:absolute;inset:0;z-index:1;
+    background:linear-gradient(180deg,rgba(10,9,14,.42) 0%,rgba(10,9,14,.70) 100%);
   }
   .topbar-row{position:relative;z-index:2;display:flex;align-items:center;gap:12px;}
   .crest-badge{
@@ -679,9 +680,12 @@ var FIREBASE_CONFIG = {
   appId: "1:655854550724:web:45b6c996c0c47cd0e9d391"
 };
 
-var APP_NAME = '우리동네 축구왕';
-var APP_SUB = 'KICKTOWN · 동네 축구 리그';
-var APP_LOGO = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjAgMTIwIj4KPGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjRDQyQTNFIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjOEUwRDI0Ii8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+CjxwYXRoIGQ9Ik02MCA4IEwxMDQgMjAgTDEwNCA2MiBDMTA0IDkwIDg0IDEwNiA2MCAxMTQgQzM2IDEwNiAxNiA5MCAxNiA2MiBMMTYgMjAgWiIgZmlsbD0idXJsKCNnKSIgc3Ryb2tlPSIjRTdCODRCIiBzdHJva2Utd2lkdGg9IjMuNSIvPgo8ZyBmaWxsPSIjRTdCODRCIj48cGF0aCBkPSJNNDAgNDIgTDQwIDMwIEw1MCAzOCBMNjAgMjYgTDcwIDM4IEw4MCAzMCBMODAgNDIgWiIvPjxjaXJjbGUgY3g9IjQwIiBjeT0iMjciIHI9IjIuNiIvPjxjaXJjbGUgY3g9IjYwIiBjeT0iMjMiIHI9IjIuNiIvPjxjaXJjbGUgY3g9IjgwIiBjeT0iMjciIHI9IjIuNiIvPjwvZz4KPGNpcmNsZSBjeD0iNjAiIGN5PSI3NCIgcj0iMjEiIGZpbGw9IiNGQkZCRjciLz4KPGcgZmlsbD0iIzE0MTQxNCI+PHBvbHlnb24gcG9pbnRzPSI2MCw2MyA2OCw2OSA2NSw3OSA1NSw3OSA1Miw2OSIvPjwvZz4KPGcgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjMTQxNDE0IiBzdHJva2Utd2lkdGg9IjIuNCI+PHBhdGggZD0iTTYwIDYzIEw2MCA1NSIvPjxwYXRoIGQ9Ik02OCA2OSBMNzYgNjUiLz48cGF0aCBkPSJNNjUgNzkgTDcwIDg2Ii8+PHBhdGggZD0iTTU1IDc5IEw1MCA4NiIvPjxwYXRoIGQ9Ik01MiA2OSBMNDQgNjUiLz48L2c+CjxjaXJjbGUgY3g9IjYwIiBjeT0iNzQiIHI9IjIxIiBmaWxsPSJub25lIiBzdHJva2U9IiMxNDE0MTQiIHN0cm9rZS13aWR0aD0iMiIvPgo8L3N2Zz4=';
+var APP_NAME = '동네 축구왕';
+var APP_SUB = 'KICKTOWN';
+/* 동축_아이콘: 로그인/팀탭 대표 이미지. 실제 이미지 오면 아래 APP_LOGO 값만 교체 (임시 '동축' 플레이스홀더) */
+var APP_LOGO = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjAgMTIwIj4KPGRlZnM+PGxpbmVhckdyYWRpZW50IGlkPSJnIiB4MT0iMCIgeTE9IjAiIHgyPSIwIiB5Mj0iMSI+PHN0b3Agb2Zmc2V0PSIwIiBzdG9wLWNvbG9yPSIjRDQyQTNFIi8+PHN0b3Agb2Zmc2V0PSIxIiBzdG9wLWNvbG9yPSIjOEUwRDI0Ii8+PC9saW5lYXJHcmFkaWVudD48L2RlZnM+CjxwYXRoIGQ9Ik02MCA4IEwxMDQgMjAgTDEwNCA2MiBDMTA0IDkwIDg0IDEwNiA2MCAxMTQgQzM2IDEwNiAxNiA5MCAxNiA2MiBMMTYgMjAgWiIgZmlsbD0idXJsKCNnKSIgc3Ryb2tlPSIjRTdCODRCIiBzdHJva2Utd2lkdGg9IjMuNSIvPgo8dGV4dCB4PSI2MCIgeT0iNTYiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjMwIiBmb250LXdlaWdodD0iNzAwIiBmaWxsPSIjRkJGQkY3IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj7rj5nstpU8L3RleHQ+Cjx0ZXh0IHg9IjYwIiB5PSI4NiIgZm9udC1mYW1pbHk9InNhbnMtc2VyaWYiIGZvbnQtc2l6ZT0iMTEiIGxldHRlci1zcGFjaW5nPSIyIiBmaWxsPSIjRTdCODRCIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIj5LSUNLVE9XTjwvdGV4dD4KPC9zdmc+';
+/* 동축_배경: 헤더 배경 이미지. 이미지 오면 아래 APP_BG 에 data-URI 넣기 (빈 값이면 기존 다크 그라디언트 유지) */
+var APP_BG = '';
 var ACTIVE_CLUB = null;   // 현재 선택된 팀 id (팀별 데이터 스코프)
 
 var API = {
@@ -1938,7 +1942,7 @@ function viewMore(){
   +   (isAdmin()?'<div class="list-row" style="cursor:pointer;" onclick="copyVenueLink(location.hostname)"><span class="nm" style="flex:1;">현재 도메인 <span style="font-size:10px;color:var(--steel-soft);">(카카오맵 등록용)</span></span><span class="val" style="font-size:11.5px;color:var(--steel);word-break:break-all;">'+esc(location.hostname)+'</span></div>':'')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">우리동네 축구왕 · v0.18</p>';
+  + '<p class="hint">동네 축구왕 · v0.19</p>';
 }
 function moreItem(id,title,sub,icon){
   return '<div class="player" style="margin-bottom:9px;" onclick="go(\''+id+'\')">'
@@ -3369,8 +3373,8 @@ function showLogin(){
   sel.innerHTML = ''
     + '<div class="auth-inner">'
     + '<img class="auth-logo" src="'+APP_LOGO+'" alt="'+esc(APP_NAME)+'">'
-    + '<div class="auth-title">우축</div>'
-    + '<div class="auth-name2">우리동네 축구왕</div>'
+    + '<div class="auth-title">동축</div>'
+    + '<div class="auth-name2">동네 축구왕</div>'
     + '<div class="auth-sub">KICKTOWN</div>'
     + '<div class="auth-form">'
     +   '<input id="au_search" type="text" placeholder="이름 입력 (예: 김)" autocomplete="off" oninput="filterLoginList()" onfocus="filterLoginList()">'
@@ -3616,6 +3620,7 @@ FS.init = function(){
 
 
 var LOGO_URI = (document.querySelector('.crest-img')||{}).src || '';
+if(APP_BG){ document.documentElement.style.setProperty('--hero-img', 'url("'+APP_BG+'")'); }
 FS.init();
 API.run('bootstrap').then(function(b){
   if(b){ if(b.config) state.cfg=b.config; state.clubs=b.clubs||[]; }
