@@ -1995,6 +1995,7 @@ function viewMore(){
   + moreItem('poll','투표','회식·일정 등 팀 투표','M9 11l3 3 8-8M4 12h5M4 6h9M4 18h7')
   + moreItem('board','게시판','공지사항 · 건의사항','M4 5h16v12H8l-4 4z')
   + moreItem('venue','경기장 위치','지도 링크 공유','M12 21s-7-5-7-11a7 7 0 1114 0c0 6-7 11-7 11z')
+  + (isAdmin() ? importSection_() : '')
   + '<div class="eyebrow" style="margin-top:22px;">계정</div>'
   + '<div class="card" style="padding:4px 0;">'
   +   '<div class="list-row"><span class="nm" style="flex:1;">로그인 계정</span><span class="val" style="font-size:13.5px;color:var(--ink);">'+who+'</span></div>'
@@ -2004,7 +2005,152 @@ function viewMore(){
   +   (isAdmin()?'<div class="list-row" style="cursor:pointer;" onclick="copyVenueLink(location.hostname)"><span class="nm" style="flex:1;">현재 도메인 <span style="font-size:10px;color:var(--steel-soft);">(카카오맵 등록용)</span></span><span class="val" style="font-size:11.5px;color:var(--steel);word-break:break-all;">'+esc(location.hostname)+'</span></div>':'')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.23</p>';
+  + '<p class="hint">동네 축구왕 · v0.24</p>';
+}
+function importSection_(){
+  return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
+  + '<div class="card" style="padding:12px 14px;">'
+  +   '<div style="font-weight:700;font-size:14px;margin-bottom:2px;">팀원 정보</div>'
+  +   '<div class="hint" style="margin:0 0 8px;">양식을 받아 채운 뒤 업로드하면 현재 팀에 일괄 등록돼요.</div>'
+  +   '<div style="display:flex;gap:8px;margin-bottom:14px;">'
+  +     '<button class="btn-ghost" style="flex:1;" onclick="dlTemplate(\'players\')">📄 양식 받기</button>'
+  +     '<button class="btn-ghost" style="flex:1;" onclick="pickImport(\'players\')">⬆️ 가져오기</button>'
+  +   '</div>'
+  +   '<div style="font-weight:700;font-size:14px;margin-bottom:2px;">경기 기록</div>'
+  +   '<div class="hint" style="margin:0 0 8px;">팀원을 먼저 등록해야 득점·도움이 이름으로 연결돼요.</div>'
+  +   '<div style="display:flex;gap:8px;">'
+  +     '<button class="btn-ghost" style="flex:1;" onclick="dlTemplate(\'matches\')">📄 양식 받기</button>'
+  +     '<button class="btn-ghost" style="flex:1;" onclick="pickImport(\'matches\')">⬆️ 가져오기</button>'
+  +   '</div>'
+  + '</div>';
+}
+/* SheetJS 온디맨드 로드 */
+function loadXLSX_(cb){
+  if(window.XLSX){ cb(true); return; }
+  var s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  s.onload=function(){ cb(!!window.XLSX); };
+  s.onerror=function(){ cb(false); };
+  document.head.appendChild(s);
+}
+var IMPORT_COLS = {
+  players: ['이름','등번호','역할','포지션','생년월일','키','몸무게','지역','사이즈'],
+  matches: ['날짜','시간','상대팀','장소','우리점수','상대점수','득점','도움']
+};
+function dlTemplate(type){
+  loadXLSX_(function(ok){
+    if(!ok){ toast('엑셀 모듈을 불러오지 못했어요 (네트워크 확인)'); return; }
+    var cols = IMPORT_COLS[type];
+    var sample = type==='players'
+      ? [['홍길동',7,'팀원','MF,FW','1995-03-12',176,70,'서울','L']]
+      : [['2025-07-19','15:00','FC 라이온즈','매화 축구장',3,1,'홍길동:2, 김철수','이영희']];
+    var aoa=[cols].concat(sample);
+    var ws=XLSX.utils.aoa_to_sheet(aoa);
+    var wb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, type==='players'?'팀원':'경기');
+    XLSX.writeFile(wb, (type==='players'?'팀원_양식':'경기_양식')+'.xlsx');
+  });
+}
+function pickImport(type){
+  if(!state.activeClubId){ toast('먼저 팀을 선택하세요'); return; }
+  var inp=document.createElement('input');
+  inp.type='file'; inp.accept='.xlsx,.xls,.csv';
+  inp.onchange=function(){ if(inp.files&&inp.files[0]) handleImportFile_(inp.files[0], type); };
+  inp.click();
+}
+function handleImportFile_(file, type){
+  loadXLSX_(function(ok){
+    if(!ok){ toast('엑셀 모듈을 불러오지 못했어요 (네트워크 확인)'); return; }
+    var r=new FileReader();
+    r.onload=function(e){
+      try{
+        var wb=XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+        var ws=wb.Sheets[wb.SheetNames[0]];
+        var rows=XLSX.utils.sheet_to_json(ws, {defval:''});
+        if(!rows.length){ toast('데이터가 없어요'); return; }
+        if(type==='players') importPlayers_(rows);
+        else importMatches_(rows);
+      }catch(err){ toast('파일을 읽지 못했어요'); }
+    };
+    r.readAsArrayBuffer(file);
+  });
+}
+function s_(v){ return (v===undefined||v===null)?'':String(v).trim(); }
+function n_(v){ var x=parseInt(s_(v),10); return isNaN(x)?null:x; }
+/* 행 → 팀원 객체 배열 */
+function rowsToPlayers_(rows, cid){
+  var out=[], t=Date.now();
+  for(var i=0;i<rows.length;i++){
+    var r=rows[i]; var name=s_(r['이름']); if(!name) continue;
+    var pos=s_(r['포지션']).split(/[,\s/]+/).filter(function(x){return x;});
+    var role=s_(r['역할']); if(role!=='임원') role='팀원';
+    out.push({ id:'m'+t+'_'+i, clubId:cid, name:name, num:n_(r['등번호']),
+      positions:pos, role:role, birth:s_(r['생년월일']), height:n_(r['키']),
+      weight:n_(r['몸무게']), region:s_(r['지역']), size:s_(r['사이즈']) });
+  }
+  return out;
+}
+/* "이름:수, 이름" → [{name,count}] */
+function parseStatCell_(cell){
+  var out=[]; s_(cell).split(/[,\n]+/).forEach(function(part){
+    part=part.trim(); if(!part) return;
+    var m=part.split(':'); var nm=m[0].trim(); var c=m.length>1?(parseInt(m[1],10)||1):1;
+    if(nm) out.push({name:nm, count:c});
+  }); return out;
+}
+/* 행 → {matches, stats, unmatched} */
+function rowsToMatches_(rows, cid, players){
+  var byName={}; players.forEach(function(p){ byName[p.name]=p.id; });
+  var matches=[], stats=[], unmatched={}, t=Date.now();
+  for(var i=0;i<rows.length;i++){
+    var r=rows[i]; var opp=s_(r['상대팀']); var date=s_(r['날짜']);
+    if(!opp && !date) continue;
+    var mid='g'+t+'_'+i;
+    var os=n_(r['우리점수']), ps=n_(r['상대점수']);
+    var mo={ id:mid, clubId:cid, date:date, time:s_(r['시간']), opponent:opp, venue:s_(r['장소']), venueUrl:'' };
+    if(os!==null && ps!==null){ mo.ourScore=os; mo.oppScore=ps; mo.result=(os>ps?'W':(os<ps?'L':'D')); }
+    matches.push(mo);
+    var agg={};
+    parseStatCell_(r['득점']).forEach(function(x){ var pid=byName[x.name]; if(!pid){unmatched[x.name]=1;return;} agg[pid]=agg[pid]||{g:0,a:0}; agg[pid].g+=x.count; });
+    parseStatCell_(r['도움']).forEach(function(x){ var pid=byName[x.name]; if(!pid){unmatched[x.name]=1;return;} agg[pid]=agg[pid]||{g:0,a:0}; agg[pid].a+=x.count; });
+    Object.keys(agg).forEach(function(pid){ stats.push({matchId:mid, playerId:pid, goals:agg[pid].g, assists:agg[pid].a}); });
+  }
+  return {matches:matches, stats:stats, unmatched:Object.keys(unmatched)};
+}
+/* Firestore 일괄 쓰기 + 메모리 반영 */
+function bulkWrite_(key, arr){
+  if(!arr.length) return Promise.resolve();
+  DB[key]=(DB[key]||[]).concat(arr);
+  if(!window.db || !FS.enabled) return Promise.resolve();
+  var m=FS_MAP[key], b=db.batch();
+  arr.forEach(function(x){ b.set(db.collection(m.coll).doc(String(m.id(x))), fsClean(x), {merge:true}); });
+  return b.commit().catch(function(){});
+}
+function importPlayers_(rows){
+  var cid=state.activeClubId;
+  var players=rowsToPlayers_(rows, cid);
+  if(!players.length){ toast('등록할 팀원이 없어요 (이름 확인)'); return; }
+  if(!confirm(players.length+'명의 팀원을 현재 팀에 등록할까요?')) return;
+  bulkWrite_('players', players).then(function(){
+    toast('팀원 '+players.length+'명을 등록했어요');
+    if(state.screen==='team'||state.screen==='more') render();
+  });
+}
+function importMatches_(rows){
+  var cid=state.activeClubId;
+  var players=(DB.players||[]).filter(function(p){return p.clubId===cid;});
+  var res=rowsToMatches_(rows, cid, players);
+  if(!res.matches.length){ toast('등록할 경기가 없어요 (상대팀/날짜 확인)'); return; }
+  var msg=res.matches.length+'경기를 등록할까요?';
+  if(res.stats.length) msg+=' (득점·도움 '+res.stats.length+'건 포함)';
+  if(res.unmatched.length) msg+='\n\n※ 팀원에 없는 이름은 제외: '+res.unmatched.join(', ');
+  if(!confirm(msg)) return;
+  bulkWrite_('matches', res.matches).then(function(){
+    return bulkWrite_('stats', res.stats);
+  }).then(function(){
+    toast('경기 '+res.matches.length+'건을 등록했어요');
+    if(['form','record','more'].indexOf(state.screen)>-1) render();
+  });
 }
 function moreItem(id,title,sub,icon){
   return '<div class="player" style="margin-bottom:9px;" onclick="go(\''+id+'\')">'
@@ -2690,7 +2836,7 @@ function viewClub(){
 
   var body;
   if(!all.length){
-    body = '<div class="empty"><div class="ei">🛡️</div>등록된 팀이 없습니다.<br>＋ 팀 등록으로 우리 팀을 만들어보세요.</div>';
+    body = '<div class="empty"><div class="ei">🛡️</div>등록된 팀이 없습니다.'+(isGuest()?'':'<br>＋ 팀 등록으로 우리 팀을 만들어보세요.')+'</div>';
   } else if(!list.length){
     body = '<div class="empty"><div class="ei">🔍</div>조건에 맞는 팀이 없습니다.</div>';
   } else {
@@ -3023,7 +3169,7 @@ function openMatchForm(id){
 /* 카카오맵 JavaScript 키 (클라이언트 공개용 · 도메인 화이트리스트로 보호) */
 var KAKAO_JS_KEY = '2d591b6ef9c70f94f369b7c55c91baa3';
 /* 카카오 로그인 백엔드 base URL (OAuth 토큰 교환 서버 · 배포 후 입력, 예: https://xxx.vercel.app) */
-var KAKAO_BACKEND = 'https://kick-town.vercel.app';
+var KAKAO_BACKEND = '';
 var venueMap=null, venueMarker=null, venuePick=null, leafletTried=false, kakaoTried=false;
 var kakaoMap=null, kakaoMarker=null, mapProvider=null;
 
@@ -3835,13 +3981,9 @@ FS.run = function(fn, args){
     return mockHandler(fn, args);   // 읽기 (메모리 즉시)
   });
 };
-/* 팀이 하나도 없으면 FC JEMIRO 기본 팀을 1회 자동 등록 */
+/* 자동 시드 비활성화: 빈 상태로 시작 (구단주가 직접 팀 생성) */
 function fsSeedClub_(){
-  if(DB.clubs && DB.clubs.length) return Promise.resolve();
-  var crest = (document.querySelector('.crest-img')||{}).src || '';
-  var club = { id:'c_jemiro', name:'FC JEMIRO', region:'안산', note:'SINCE 2014 · 12TH SEASON', emblem:crest, ownerId:'', own:true, createdAt:new Date().toISOString() };
-  DB.clubs = [club];
-  return db.collection('clubs').doc(club.id).set(fsClean(club), {merge:true}).catch(function(){});
+  return Promise.resolve();
 }
 function fsStampClub_(){
   var own = (DB.clubs||[]).filter(function(c){return c.own;})[0] || (DB.clubs||[])[0];
