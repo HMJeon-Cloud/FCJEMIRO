@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>FC JEMIRO · 팀 운영</title>
+<title>동네 축구왕</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -523,9 +523,15 @@
   .toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
 
   .hint{font-size:11.5px;color:var(--steel-soft);text-align:center;margin-top:16px;line-height:1.6;padding:0 10px;}
+  #splash{position:fixed;inset:0;z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(120% 90% at 50% 0%,#201D28 0%,#111015 60%,#0C0B10 100%);color:#fff;transition:opacity .22s ease;}
+  #splash .sp-title{font-family:'Oswald',system-ui,sans-serif;font-weight:700;font-size:30px;letter-spacing:.12em;}
+  #splash .sp-sub{font-size:11px;letter-spacing:.34em;color:#E7C878;margin-top:7px;}
+  #splash .sp-spin{margin-top:24px;width:28px;height:28px;border:3px solid rgba(255,255,255,.16);border-top-color:#C7A24B;border-radius:50%;animation:spspin .8s linear infinite;}
+  @keyframes spspin{to{transform:rotate(360deg);}}
 </style>
 </head>
 <body>
+<div id="splash"><div class="sp-title">동네 축구왕</div><div class="sp-sub">KICKTOWN</div><div class="sp-spin"></div></div>
 <div class="phone">
 
   <!-- Header -->
@@ -2005,7 +2011,7 @@ function viewMore(){
   +   (isAdmin()?'<div class="list-row" style="cursor:pointer;" onclick="copyVenueLink(location.hostname)"><span class="nm" style="flex:1;">현재 도메인 <span style="font-size:10px;color:var(--steel-soft);">(카카오맵 등록용)</span></span><span class="val" style="font-size:11.5px;color:var(--steel);word-break:break-all;">'+esc(location.hostname)+'</span></div>':'')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.24</p>';
+  + '<p class="hint">동네 축구왕 · v0.25</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
@@ -3764,12 +3770,12 @@ function handleKakaoReturn_(){
   fetch(base + '/api/kakao/session', {
     method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ks:ks})
   }).then(function(r){ return r.json(); }).then(function(res){
-    if(!res || !res.ok){ toast((res&&res.error)||'카카오 로그인에 실패했어요'); applyAppHeader(); showLogin(); return; }
+    if(!res || !res.ok){ toast((res&&res.error)||'카카오 로그인에 실패했어요'); applyAppHeader(); showLogin(); hideSplash_(); return; }
     return API.run('ownerKakao', String(res.kakaoId), res.name||'카카오사용자').then(function(r){
-      if(r && r.ok){ toast(r.name+'님 환영합니다'); finishAuth_(r); }
-      else { toast((r&&r.error)||'로그인 실패'); applyAppHeader(); showLogin(); }
+      if(r && r.ok){ toast(r.name+'님 환영합니다'); finishAuth_(r); hideSplash_(); }
+      else { toast((r&&r.error)||'로그인 실패'); applyAppHeader(); showLogin(); hideSplash_(); }
     });
-  }).catch(function(){ toast('카카오 로그인에 실패했어요'); applyAppHeader(); showLogin(); });
+  }).catch(function(){ toast('카카오 로그인에 실패했어요'); applyAppHeader(); showLogin(); hideSplash_(); });
   return true;
 }
 function copyInviteLink(){
@@ -4016,17 +4022,31 @@ var LOGO_URI = (document.querySelector('.crest-img')||{}).src || '';
 if(APP_BG){ document.documentElement.style.setProperty('--hero-img', 'url("'+APP_BG+'")'); }
 if(AUTH_BG){ document.documentElement.style.setProperty('--login-img', 'url("'+AUTH_BG+'")'); }
 FS.init();
-API.run('bootstrap').then(function(b){
-  if(b){ if(b.config) state.cfg=b.config; state.clubs=b.clubs||[]; }
-  if(handleKakaoReturn_()){ return; }
+function hideSplash_(){ var s=document.getElementById('splash'); if(s){ s.style.opacity='0'; setTimeout(function(){ s.style.display='none'; }, 240); } }
+setTimeout(hideSplash_, 9000);   // 안전장치: 무슨 일이 있어도 스플래시는 사라짐
+(function(){
+  var hash = location.hash || '';
+  var hasKs = /[#&]ks=/.test(hash);
   var sess = loadSession();
-  if(sess && (sess.type || (sess.name && sess.memberships))){
-    state.auth = sess;
-    afterLogin_();
-  } else {
-    applyAppHeader(); showLogin();
+  var validSess = sess && (sess.type || (sess.name && sess.memberships));
+  if(hasKs){
+    // 카카오 복귀: 데이터 로드 후 처리 (내부에서 스플래시 정리)
+    API.run('bootstrap').then(function(b){ if(b){ if(b.config) state.cfg=b.config; state.clubs=b.clubs||[]; } handleKakaoReturn_(); });
+    return;
   }
-}).catch(function(){ applyAppHeader(); showLogin(); });
+  if(validSess){
+    // 세션 복원: 팀 데이터가 필요 → 로드 후 진입
+    API.run('bootstrap').then(function(b){
+      if(b){ if(b.config) state.cfg=b.config; state.clubs=b.clubs||[]; }
+      state.auth = sess; afterLogin_(); hideSplash_();
+    }).catch(function(){ applyAppHeader(); showLogin(); hideSplash_(); });
+    return;
+  }
+  // 신규/비로그인: 로그인 화면 즉시 표시 (데이터 로딩을 기다리지 않음)
+  applyAppHeader(); showLogin(); hideSplash_();
+  // 배경 예열: 이후 팀원 로그인 등에서 바로 응답
+  API.run('bootstrap').then(function(b){ if(b){ if(b.config) state.cfg=b.config; state.clubs=b.clubs||[]; } }).catch(function(){});
+})();
 
 /* 로그인 후: 접근 가능한 팀이 1개면 자동 입장, 아니면 팀 탭 */
 function afterLogin_(){
