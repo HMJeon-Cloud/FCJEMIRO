@@ -1279,12 +1279,14 @@ var TABS = [
   {id:'form',  kr:'스쿼드',    en:'FORMATION', label:'스쿼드', icon:'M12 3l2.5 5 5.5.8-4 3.9 1 5.5L12 21l-5-2.9 1-5.5-4-3.9 5.5-.8z'},
   {id:'record',kr:'기록 관리', en:'STATS',    label:'기록',  icon:'M5 20V10M12 20V4M19 20v-7'},
   {id:'att',   kr:'출석 관리', en:'ATTENDANCE',label:'출석', icon:'M12 21s-7-5-7-11a7 7 0 1114 0c0 6-7 11-7 11zM12 8a2 2 0 100 4 2 2 0 000-4z'},
-  {id:'more',  kr:'더보기',    en:'MORE',     label:'더보기', icon:'M4 6h16M4 12h16M4 18h16'}
+  {id:'more',  kr:'내정보',    en:'MY PAGE',  label:'내정보', icon:'M12 12a4 4 0 100-8 4 4 0 000 8zM4 20c0-3.3 3.6-5 8-5s8 1.7 8 5v1H4v-1z'}
 ];
 
 function renderTabs(){
   var el = document.getElementById('tabbar');
-  var TABLIST = isGuest() ? TABS.filter(function(t){return t.id==='club';}) : TABS;
+  var TABLIST = isGuest()
+    ? TABS.filter(function(t){return t.id==='club';})
+    : (state.activeClubId ? TABS : TABS.filter(function(t){return t.id==='club'||t.id==='more';}));
   el.innerHTML = TABLIST.map(function(t){
     return '<button class="tab '+(state.screen===t.id||((state.screen==='board'||state.screen==='venue'||state.screen==='poll')&&t.id==='more')?'active':'')+'" onclick="go(\''+t.id+'\')">'
       + '<svg viewBox="0 0 24 24"><path d="'+t.icon+'"/></svg>'
@@ -1295,7 +1297,7 @@ function renderTabs(){
 function go(id){
   if(isGuest() && id!=='club'){ toast('게스트는 팀 탭만 이용할 수 있어요. 구단주·팀원 로그인 후 이용하세요.'); return; }
   // 팀 미선택 상태에서 팀 종속 탭 접근 차단
-  var teamTabs={team:1,squad:1,form:1,record:1,att:1,more:1};
+  var teamTabs={team:1,squad:1,form:1,record:1,att:1};
   if(teamTabs[id] && !state.activeClubId){ toast('먼저 팀을 선택하세요'); state.screen='club'; applyHeaderFor('club'); render(); return; }
   state.screen = id;
   applyHeaderFor(id);
@@ -2075,12 +2077,17 @@ function doCheckin(matchId){
 
 /* -------- 5/6. 더보기 -------- */
 function viewMore(){
-  var who = state.auth ? (esc(state.auth.name)+' · '+state.auth.role) : '';
-  return '<div class="eyebrow">기타 메뉴</div>'
-  + moreItem('poll','투표','회식·일정 등 팀 투표','M9 11l3 3 8-8M4 12h5M4 6h9M4 18h7')
-  + moreItem('board','게시판','공지사항 · 건의사항','M4 5h16v12H8l-4 4z')
-  + moreItem('venue','경기장 위치','지도 링크 공유','M12 21s-7-5-7-11a7 7 0 1114 0c0 6-7 11-7 11z')
-  + (isAdmin() ? importSection_() : '')
+  var provTxt = state.auth ? (state.auth.provider==='kakao' ? '카카오 계정' : '이메일 계정') : '';
+  var who = state.auth ? (esc(state.auth.name)+' · '+provTxt) : '';
+  var teamSec = state.activeClubId
+    ? ('<div class="eyebrow">팀 메뉴</div>'
+      + moreItem('poll','투표','회식·일정 등 팀 투표','M9 11l3 3 8-8M4 12h5M4 6h9M4 18h7')
+      + moreItem('board','게시판','공지사항 · 건의사항','M4 5h16v12H8l-4 4z')
+      + moreItem('venue','경기장 위치','지도 링크 공유','M12 21s-7-5-7-11a7 7 0 1114 0c0 6-7 11-7 11z')
+      + (isAdmin() ? importSection_() : ''))
+    : ('<div class="eyebrow">팀 메뉴</div>'
+      + '<div class="card" style="padding:14px;"><div class="hint" style="margin:0;">아직 소속된 팀이 없어요.<br>팀 탭에서 팀을 만들거나 가입 신청하면<br>투표·게시판 등 팀 메뉴가 열려요.</div></div>');
+  return teamSec
   + '<div class="eyebrow" style="margin-top:22px;">계정</div>'
   + '<div class="card" style="padding:4px 0;">'
   +   '<div class="list-row"><span class="nm" style="flex:1;">로그인 계정</span><span class="val" style="font-size:13.5px;color:var(--ink);">'+who+'</span></div>'
@@ -2090,7 +2097,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.33</p>';
+  + '<p class="hint">동네 축구왕 · v0.34</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
