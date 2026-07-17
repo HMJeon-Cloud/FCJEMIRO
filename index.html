@@ -2147,7 +2147,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.42</p>';
+  + '<p class="hint">동네 축구왕 · v0.43</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
@@ -4243,25 +4243,121 @@ function fsOwnerKakao(kid, knm){
   });
 }
 function fsColl(name){ return db.collection(name).get().then(function(snap){ var a=[]; snap.forEach(function(d){ var o=d.data()||{}; a.push(o); }); return a; }).catch(function(e){ if(!window.__fsReadErr){ window.__fsReadErr=1; try{ console.error('읽기 실패 '+name, e); }catch(_){} setTimeout(function(){ toast('⚠️ 데이터 읽기 권한 오류 · Firestore 규칙 확인 필요'); }, 800); } return []; }); }
+/* ── 절약형 로딩: 부팅=핵심만 / 로그인=내 것 / 팀 입장=그 팀 것 / 화면=상세 ── */
+function fsQ(coll, field, val){
+  return db.collection(coll).where(field,'==',val).get().then(function(snap){ var a=[]; snap.forEach(function(d){ a.push(d.data()||{}); }); return a; }).catch(function(){ return []; });
+}
+function fsQ2(coll, f1, v1, f2, v2){
+  return db.collection(coll).where(f1,'==',v1).where(f2,'==',v2).get().then(function(snap){ var a=[]; snap.forEach(function(d){ a.push(d.data()||{}); }); return a; }).catch(function(){ return []; });
+}
+function fsIn(coll, field, ids){
+  ids=(ids||[]).filter(function(x){return x!=null&&x!=='';});
+  if(!ids.length) return Promise.resolve([]);
+  var chunks=[]; for(var i=0;i<ids.length;i+=10) chunks.push(ids.slice(i,i+10));
+  return Promise.all(chunks.map(function(ch){
+    return db.collection(coll).where(field,'in',ch).get().then(function(snap){ var a=[]; snap.forEach(function(d){ a.push(d.data()||{}); }); return a; }).catch(function(){ return []; });
+  })).then(function(rr){ var out=[]; rr.forEach(function(x){ out=out.concat(x); }); return out; });
+}
+function fsMerge(key, arr){
+  var m=FS_MAP[key]; if(!m){ DB[key]=arr; return; }
+  var map={}; (DB[key]||[]).forEach(function(x){ map[m.id(x)]=x; });
+  (arr||[]).forEach(function(x){ map[m.id(x)]=x; });
+  DB[key]=Object.keys(map).map(function(k){ return map[k]; });
+}
 function fsLoadAll(){
-  return Promise.all([
-    fsColl('members'), fsColl('matches'), fsColl('squads'), fsColl('squadMembers'),
-    fsColl('squadNotes'), fsColl('playerStats'), fsColl('attendance'), fsColl('polls'),
-    fsColl('votes'), fsColl('posts'), db.collection('config').doc('app').get(),
-    fsColl('clubs'), fsColl('extraRequests'), fsColl('matchRoster'), fsColl('noteComments'), fsColl('owners'), fsColl('joinRequests')
-  ]).then(function(r){
-    DB.players=r[0]; DB.matches=r[1]; DB.squads=r[2]; DB.members=r[3];
-    DB.notes=r[4]; DB.stats=r[5]; DB.attendance=r[6]; DB.polls=r[7];
-    DB.votes=r[8]; DB.posts=r[9]; DB.clubs=r[11]||[]; DB.extras=r[12]||[]; DB.matchRoster=r[13]||[]; DB.noteComments=r[14]||[]; DB.owners=r[15]||[]; DB.joins=r[16]||[];
-    var cfg = (r[10] && r[10].exists) ? r[10].data() : {};
-    DB.config = { checkinRadiusM: (cfg.checkinRadiusM!=null?cfg.checkinRadiusM:100), lateThresholdMin: (cfg.lateThresholdMin!=null?cfg.lateThresholdMin:0) };
+  // FS 모드: 목업 시드 제거 (모든 컬렉션 빈 상태에서 단계별 로드)
+  ['players','matches','squads','members','notes','stats','attendance','polls','votes','posts','clubs','extras','matchRoster','noteComments','owners','joins'].forEach(function(k){ DB[k]=[]; });
+  return Promise.all([ db.collection('config').doc('app').get().catch(function(){return {exists:false};}), fsColl('clubs') ])
+  .then(function(r){
+    DB.clubs=r[1]||[];
+    var cfg=(r[0]&&r[0].exists)?r[0].data():{};
+    DB.config={ checkinRadiusM:(cfg.checkinRadiusM!=null?cfg.checkinRadiusM:100), lateThresholdMin:(cfg.lateThresholdMin!=null?cfg.lateThresholdMin:0) };
     for(var k in cfg){ if(k!=='staffPw'&&k!=='memberPw') DB.config[k]=cfg[k]; }
-    return (DB.players.length===0);   // 비어있으면 이전 필요
+    return (DB.clubs.length===0);
   });
+}
+/* 내 컨텍스트: 내 명단 연결 + 내 가입신청 */
+FS._my={};
+function fsLoadMy(accId){
+  if(!accId) return Promise.resolve();
+  if(FS._my[accId]) return FS._my[accId];
+  FS._my[accId]=Promise.all([
+    fsQ('members','accountId',accId), fsQ('members','ownerId',accId), fsQ('joinRequests','accountId',accId)
+  ]).then(function(r){ fsMerge('players', r[0].concat(r[1])); fsMerge('joins', r[2]); });
+  return FS._my[accId];
+}
+/* 팀 데이터: 명단·경기·스쿼드·투표·게시글 (상세 기록은 화면별 지연 로드) */
+FS._team={};
+function fsLoadTeam(cid){
+  if(!cid) return Promise.resolve();
+  if(FS._team[cid]) return FS._team[cid];
+  FS._team[cid]=Promise.all([
+    fsQ('members','clubId',cid), fsQ('matches','clubId',cid), fsQ('squads','clubId',cid),
+    fsQ('polls','clubId',cid), fsQ('posts','clubId',cid), fsQ('extraRequests','clubId',cid)
+  ]).then(function(r){
+    fsMerge('players',r[0]); fsMerge('matches',r[1]); fsMerge('squads',r[2]);
+    fsMerge('polls',r[3]); fsMerge('posts',r[4]); fsMerge('extras',r[5]);
+  });
+  return FS._team[cid];
+}
+/* 경기 상세(득점/출석/명단): 그 팀 경기 id 기준 청크 조회 */
+FS._kids={};
+function fsLoadMatchKids(cid){
+  if(!cid) return Promise.resolve();
+  if(FS._kids[cid]) return FS._kids[cid];
+  FS._kids[cid]=fsLoadTeam(cid).then(function(){
+    var ids=(DB.matches||[]).filter(function(m){return m.clubId===cid;}).map(function(m){return m.id;});
+    return Promise.all([ fsIn('playerStats','matchId',ids), fsIn('attendance','matchId',ids), fsIn('matchRoster','matchId',ids) ]);
+  }).then(function(r){ fsMerge('stats',r[0]); fsMerge('attendance',r[1]); fsMerge('matchRoster',r[2]); });
+  return FS._kids[cid];
+}
+FS._pk={};
+function fsLoadPollKids(cid){
+  if(!cid) return Promise.resolve();
+  if(FS._pk[cid]) return FS._pk[cid];
+  FS._pk[cid]=fsLoadTeam(cid).then(function(){
+    var ids=(DB.polls||[]).filter(function(p){return p.clubId===cid;}).map(function(p){return p.id;});
+    return fsIn('votes','pollId',ids);
+  }).then(function(r){ fsMerge('votes',r); });
+  return FS._pk[cid];
+}
+FS._sk={};
+function fsLoadSquadKids(sid){
+  if(!sid) return Promise.resolve();
+  if(FS._sk[sid]) return FS._sk[sid];
+  FS._sk[sid]=Promise.all([ fsQ('squadMembers','squadId',sid), fsQ('squadNotes','squadId',sid) ]).then(function(r){
+    fsMerge('members',r[0]); fsMerge('notes',r[1]);
+    var nids=(r[1]||[]).map(function(n){return n.id;});
+    return fsIn('noteComments','noteId',nids);
+  }).then(function(cm){ fsMerge('noteComments',cm||[]); });
+  return FS._sk[sid];
 }
 
 FS.run = function(fn, args){
   return FS.ready.then(function(){
+    /* ── 필요한 범위만 선로딩 ── */
+    var accId = (state.auth&&state.auth.ownerId)||null;
+    var cid = window.ACTIVE_CLUB || state.activeClubId || null;
+    var pre = Promise.resolve();
+    if(fn==='ownerKakao'){ pre = fsQ('owners','kakaoId',String(args[0])).then(function(r){ fsMerge('owners',r); }); }
+    else if(fn==='ownerLogin'||fn==='ownerSignup'){ pre = fsQ('owners','ownerId',String(args[0]||'').trim()).then(function(r){ fsMerge('owners',r); }); }
+    else if(fn==='myMemberships'||fn==='myPendingJoins'){ pre = fsLoadMy(args[0]||accId); }
+    else if(fn==='joinClub'){ pre = Promise.all([fsLoadTeam(args[0]), fsLoadMy(args[1])]); }
+    else if(fn==='requestJoin'||fn==='cancelJoin'){ pre = Promise.all([fsLoadMy(args[1]||accId), fsLoadTeam(args[0])]); }
+    else if(fn==='getJoinRequests'){ pre = fsQ2('joinRequests','clubId',args[0],'status','pending').then(function(r){ fsMerge('joins',r); return fsLoadTeam(args[0]); }); }
+    else if(fn==='decideJoin'){ pre = db.collection('joinRequests').doc(String(args[0])).get().then(function(d){ if(d&&d.exists) fsMerge('joins',[d.data()]); var jr=(DB.joins||[]).filter(function(j){return j.id===args[0];})[0]; return jr?fsLoadTeam(jr.clubId):null; }).catch(function(){}); }
+    else if(fn==='getRecordBundle'){ pre = fsLoadMatchKids(cid); }
+    else if(fn==='getPolls'||fn==='getPollDetail'){ pre = fsLoadPollKids(cid); }
+    else if(fn==='getSquadDetail'){ pre = fsLoadSquadKids(args[0]); }
+    else if(cid){ pre = fsLoadTeam(cid); var t=WRITE_TOUCH[fn]||[];
+      if(t.indexOf('stats')>-1||t.indexOf('attendance')>-1||t.indexOf('matchRoster')>-1) pre=pre.then(function(){return fsLoadMatchKids(cid);});
+      if(t.indexOf('votes')>-1) pre=pre.then(function(){return fsLoadPollKids(cid);});
+      if((t.indexOf('members')>-1||t.indexOf('notes')>-1) && state.currentSquadId) pre=pre.then(function(){return fsLoadSquadKids(state.currentSquadId);});
+    }
+    return pre.then(function(){ return FS._dispatch(fn, args); });
+  });
+};
+FS._dispatch = function(fn, args){
     if(fn==='ownerSignup') return fsOwnerSignup(args[0], args[1], args[2]);
     if(fn==='ownerLogin') return fsOwnerLogin(args[0], args[1]);
     if(fn==='ownerKakao') return fsOwnerKakao(args[0], args[1]);
@@ -4276,7 +4372,6 @@ FS.run = function(fn, args){
       return res;
     }
     return mockHandler(fn, args);   // 읽기 (메모리 즉시)
-  });
 };
 /* 자동 시드 비활성화: 빈 상태로 시작 (구단주가 직접 팀 생성) */
 function fsSeedClub_(){
