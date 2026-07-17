@@ -147,19 +147,23 @@
   /* Bottom nav */
   .tabbar{
     position:absolute;left:0;right:0;bottom:0;z-index:15;
-    background:rgba(255,255,255,.94);backdrop-filter:blur(14px);
-    border-top:1px solid var(--line-strong);box-shadow:0 -4px 18px rgba(17,16,21,.05);
-    display:flex;padding:8px 6px calc(8px + env(safe-area-inset-bottom));
+    background:rgba(255,255,255,.92);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);
+    border-top:1px solid rgba(17,16,21,.06);box-shadow:0 -8px 24px rgba(17,16,21,.06);
+    display:flex;gap:2px;padding:7px 8px calc(7px + env(safe-area-inset-bottom));
   }
   .tab{
     flex:1;background:none;border:none;cursor:pointer;
-    display:flex;flex-direction:column;align-items:center;gap:4px;
-    padding:5px 2px;color:var(--steel-soft);
+    display:flex;flex-direction:column;align-items:center;gap:3px;
+    padding:6px 0 5px;color:var(--steel-soft);border-radius:14px;
+    transition:background .18s ease,color .18s ease,transform .1s ease;
+    -webkit-tap-highlight-color:transparent;
   }
-  .tab svg{width:23px;height:23px;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round;}
+  .tab:active{transform:scale(.93);}
+  .tab svg{width:22px;height:22px;stroke:currentColor;stroke-width:1.9;fill:none;stroke-linecap:round;stroke-linejoin:round;transition:transform .18s ease;}
   .tab .lbl{font-size:10.5px;font-weight:600;letter-spacing:.01em;}
-  .tab.active{color:var(--red);}
-  .tab.active .lbl{color:var(--ink);}
+  .tab.active{color:var(--red);background:rgba(200,32,44,.08);}
+  .tab.active svg{transform:translateY(-1px);stroke-width:2.2;}
+  .tab.active .lbl{color:var(--ink);font-weight:700;}
 
   /* Bottom sheet */
   .sheet-wrap{position:absolute;inset:0;z-index:40;display:none;}
@@ -392,6 +396,15 @@
   .share-btn{display:flex;align-items:center;justify-content:space-between;width:100%;padding:13px 15px;border:1px solid var(--line-strong);border-radius:13px;background:#fff;font-size:14.5px;font-weight:700;color:var(--ink);text-decoration:none;margin-bottom:8px;box-shadow:var(--shadow-sm);}
   .share-btn:active{background:var(--paper);}
   .sb-note{font-size:11px;color:var(--steel-soft);font-weight:600;}
+  /* 지도·내비 앱 런처 그리드 */
+  .app-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px 8px;padding:4px 0 2px;}
+  .app-item{display:flex;flex-direction:column;align-items:center;gap:7px;text-decoration:none;-webkit-tap-highlight-color:transparent;}
+  .app-item:active .app-ico{transform:scale(.93);}
+  .app-ico{width:54px;height:54px;border-radius:16px;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(17,16,21,.14), inset 0 1px 0 rgba(255,255,255,.25);transition:transform .12s ease;}
+  .app-ico svg{width:26px;height:26px;}
+  .app-ico.bordered{border:1px solid var(--line-strong);box-shadow:0 3px 10px rgba(17,16,21,.08);}
+  .app-lbl{font-size:11px;font-weight:700;color:var(--ink);text-align:center;line-height:1.25;}
+  .app-note{font-size:9.5px;color:var(--steel-soft);font-weight:600;margin-top:-3px;}
 
   /* mini buttons (권한 관리) */
   .btn-mini{flex:0 0 auto;padding:8px 11px;border:none;border-radius:9px;background:var(--ink);color:#fff;font-size:11.5px;font-weight:700;font-family:inherit;cursor:pointer;margin-left:6px;}
@@ -2097,7 +2110,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.34</p>';
+  + '<p class="hint">동네 축구왕 · v0.35</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
@@ -2816,22 +2829,33 @@ function openVenueShare(matchId){
   var tUrl = hasXY ? ('tmap://route?goalname='+encodeURIComponent(name)+'&goalx='+lng+'&goaly='+lat) : '';
   var shareUrl = kUrl || gUrl;
 
-  function linkBtn(label, url, note){
+  function appTile(label, url, note, bg, glyph, bordered){
     if(!url) return '';
-    return '<a class="share-btn" href="'+esc(url)+'" target="_blank" rel="noopener"><span>'+label+'</span><span class="sb-note">'+note+'</span></a>';
+    return '<a class="app-item" href="'+esc(url)+'" target="_blank" rel="noopener">'
+      + '<span class="app-ico'+(bordered?' bordered':'')+'" style="background:'+bg+';">'+glyph+'</span>'
+      + '<span class="app-lbl">'+label+'</span>'
+      + (note?'<span class="app-note">'+note+'</span>':'')
+      + '</a>';
   }
+  /* 글리프: 지도 핀 / 내비 화살표 (색상만 브랜드 컬러) */
+  function pinG(color){ return '<svg viewBox="0 0 24 24" fill="'+color+'"><path d="M12 2a7.4 7.4 0 00-7.4 7.4C4.6 15 12 22 12 22s7.4-7 7.4-12.6A7.4 7.4 0 0012 2zm0 10.1a2.7 2.7 0 110-5.4 2.7 2.7 0 010 5.4z"/></svg>'; }
+  function naviG(color){ return '<svg viewBox="0 0 24 24" fill="'+color+'"><path d="M21.7 2.3a1 1 0 00-1.05-.23l-18 7a1 1 0 00.06 1.88l7.36 2.45 2.45 7.36a1 1 0 001.88.06l7-18a1 1 0 00-.23-1.05z"/></svg>'; }
   var html = '<div class="grabber"></div>'
    + '<div class="sheet-head"><h3>'+esc(name)+'</h3><button class="x" onclick="closeSheet()">✕</button></div>'
    + '<div class="sheet-body">'
    +   '<div class="field"><label>지도에서 열기</label>'
-   +     linkBtn('카카오맵', kUrl, '웹·앱')
-   +     linkBtn('구글 지도', gUrl, '웹·앱')
-   +     (name ? linkBtn('네이버 지도', 'https://map.naver.com/p/search/'+encodeURIComponent(name), '웹·앱') : '')
+   +     '<div class="app-grid">'
+   +       appTile('카카오맵', kUrl, '웹·앱', '#FEE500', pinG('#191600'))
+   +       appTile('네이버 지도', name?('https://map.naver.com/p/search/'+encodeURIComponent(name)):'', '웹·앱', '#03C75A', pinG('#fff'))
+   +       appTile('구글 지도', gUrl, '웹·앱', '#fff', pinG('#4285F4'), true)
+   +     '</div>'
    +   '</div>'
    +   (hasXY ? '<div class="field"><label>내비 앱으로 안내</label>'
-   +     linkBtn('카카오내비', kNavi, '앱 설치 시')
-   +     linkBtn('네이버 지도 길찾기', nUrl, '앱 설치 시')
-   +     linkBtn('티맵', tUrl, '앱 설치 시')
+   +     '<div class="app-grid">'
+   +       appTile('카카오내비', kNavi, '앱 설치 시', '#FEE500', naviG('#191600'))
+   +       appTile('네이버 길찾기', nUrl, '앱 설치 시', '#03C75A', naviG('#fff'))
+   +       appTile('티맵', tUrl, '앱 설치 시', 'linear-gradient(135deg,#0FA7FF 0%,#6A2FF5 100%)', naviG('#fff'))
+   +     '</div>'
    +   '</div>' : '')
    +   '<div class="field"><label>팀에 공유</label>'
    +     '<button class="btn-primary" style="margin-bottom:9px;" onclick="shareVenueLink(\''+esc(name).replace(/'/g,'')+'\',\''+esc(shareUrl)+'\')">공유하기 (카카오톡 등)</button>'
