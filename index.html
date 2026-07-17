@@ -2140,7 +2140,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.38</p>';
+  + '<p class="hint">동네 축구왕 · v0.39</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
@@ -4336,8 +4336,11 @@ setTimeout(hideSplash_, 9000);   // 안전장치: 무슨 일이 있어도 스플
   }
   // 신규/비로그인: 로그인 화면 즉시 표시 (데이터 로딩을 기다리지 않음)
   applyAppHeader(); showLogin(); hideSplash_();
-  // 배경 예열: 이후 팀원 로그인 등에서 바로 응답
-  API.run('bootstrap').then(function(b){ if(b){ if(b.config) state.cfg=b.config; state.clubs=b.clubs||[]; } }).catch(function(){});
+  // 배경 예열: 이후 팀원 로그인 등에서 바로 응답. 완료 시 팀 화면이면 목록 갱신
+  API.run('bootstrap').then(function(b){
+    if(b){ if(b.config) state.cfg=b.config; state.clubs=b.clubs||[]; }
+    if(state.auth && state.screen==='club'){ render(); }
+  }).catch(function(){});
 })();
 
 /* 로그인 후: 접근 가능한 팀이 1개면 자동 입장, 아니면 팀 탭 */
