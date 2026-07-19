@@ -1803,6 +1803,9 @@ function saveSquadName(id){
 }
 function deleteSquadConfirm(id, name){
   if(!requireAdmin()) return;
+  confirmDelete_('<b>'+esc(name||'이 스쿼드')+'</b> 스쿼드를 삭제할까요?', function(){ doDeleteSquad(id, name); });
+}
+function doDeleteSquad(id, name){
   state.squadList=(state.squadList||[]).filter(function(s){return s.id!==id;});
   delete SQUAD_CACHE[id];
   if(state.currentSquadId===id){ state.currentSquadId = state.squadList.length?state.squadList[0].id:null; state.squadDetail = state.currentSquadId?SQUAD_CACHE[state.currentSquadId]:null; }
@@ -2241,7 +2244,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.55</p>';
+  + '<p class="hint">동네 축구왕 · v0.56</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
@@ -2509,6 +2512,9 @@ function deletePostConfirm(id){
   var p=(state.posts||[]).filter(function(x){return x.id===id;})[0];
   var mine = state.auth && p && (p.authorId===state.auth.playerId);
   if(!mine && !isAdmin()){ toast('작성자 또는 임원만 삭제할 수 있습니다'); return; }
+  confirmDelete_('이 글을 삭제할까요?', function(){ doDeletePost(id); });
+}
+function doDeletePost(id){
   state.posts = (state.posts||[]).filter(function(x){return x.id!==id;});
   closeSheet(); render(); toast('삭제되었습니다');
   API.run('deletePost', id).then(function(list){ if(list) state.posts=list; if(state.screen==='board') render(); }).catch(function(){ toast('삭제 저장 실패 · 새로고침'); });
@@ -2889,6 +2895,9 @@ function closePollConfirm(pollId){
 }
 function deletePollConfirm(pollId){
   if(!canManagePoll_(pollById_(pollId))){ toast('만든 사람 또는 임원만 삭제할 수 있습니다'); return; }
+  confirmDelete_('이 투표를 삭제할까요?<br><span style="font-size:12px;color:var(--steel-soft);">투표 결과도 함께 삭제됩니다.</span>', function(){ doDeletePoll(pollId); });
+}
+function doDeletePoll(pollId){
   API.run('deletePoll', pollId).then(function(list){ state.polls=list; closeSheet(); render(); toast('삭제되었습니다'); }).catch(function(){ toast('실패했습니다'); });
 }
 
@@ -3382,11 +3391,29 @@ function saveErr(){
 }
 function deletePlayer(id){
   if(!requireAdmin()) return;
+  var p=(state.players||[]).filter(function(x){return x.id===id;})[0];
+  confirmDelete_('<b>'+esc(p?p.name:'이 팀원')+'</b> 님을 명단에서 삭제할까요?', function(){ doDeletePlayer(id); });
+}
+function doDeletePlayer(id){
   state.players = state.players.filter(function(p){return p.id!==id;});
   closeSheet(); render(); toast('삭제되었습니다');
   API.run('deletePlayer', id).then(function(list){ state.players = list; if(state.screen==='team') render(); }).catch(function(){ toast('삭제 저장 실패 · 새로고침'); });
 }
 function closeSheet(){ document.getElementById('sheetWrap').classList.remove('open'); }
+/* 삭제 확인 공통 (예/아니오) — onYes 콜백을 상태에 담아 안전하게 실행 */
+function confirmDelete_(msg, onYes){
+  state._delYes = onYes;
+  showSheet('<div class="grabber"></div>'
+   + '<div class="sheet-head"><h3>삭제 확인</h3><button class="x" onclick="closeSheet()">✕</button></div>'
+   + '<div class="sheet-body">'
+   +   '<p style="font-size:14px;color:var(--steel);margin:0 0 16px;line-height:1.65;">'+msg+'</p>'
+   +   '<div style="display:flex;gap:9px;">'
+   +     '<button class="btn-ghost" style="flex:1;margin:0;" onclick="closeSheet()">아니오</button>'
+   +     '<button class="btn-primary btn-danger" style="flex:1;" onclick="confirmDeleteYes_()">예, 삭제</button>'
+   +   '</div>'
+   + '</div>');
+}
+function confirmDeleteYes_(){ var f=state._delYes; state._delYes=null; closeSheet(); if(typeof f==='function') f(); }
 
 /* ================= 경기 폼 ================= */
 function openMatchForm(id){
@@ -3615,6 +3642,11 @@ function saveMatch(id){
   }).catch(function(){ toast('저장 실패 · 새로고침'); });
 }
 function deleteMatchConfirm(id){
+  if(!requireAdmin()) return;
+  var m=(state.matches||[]).filter(function(x){return x.id===id;})[0];
+  confirmDelete_('이 경기를 삭제할까요?'+(m&&m.opponent?' (vs '+esc(m.opponent)+')':'')+'<br><span style="font-size:12px;color:var(--steel-soft);">관련 스쿼드·기록도 함께 삭제됩니다.</span>', function(){ doDeleteMatch(id); });
+}
+function doDeleteMatch(id){
   // 낙관적: 목록에서 즉시 제거
   state.matches = state.matches.filter(function(m){return m.id!==id;});
   if(state.squadMatchId===id){ state.squadMatchId = state.matches.length ? state.matches[0].id : null; state.currentSquadId=null; }
