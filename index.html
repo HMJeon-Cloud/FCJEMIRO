@@ -1420,6 +1420,9 @@ function render(){
   document.getElementById('fab').style.display = (state.screen==='team' && isAdmin()) ? 'flex':'none';
 
   var c = document.getElementById('content');
+  // 같은 화면을 다시 그릴 때는 스크롤 위치 유지 (출석 체크 등 인플레이스 갱신 시 위로 안 튐)
+  var keepScroll = (state._rScreen === state.screen);
+  var savedTop = keepScroll ? c.scrollTop : 0;
   if(state.screen==='club')   c.innerHTML = viewClub();
   else if(state.screen==='team')   c.innerHTML = viewTeam();
   else if(state.screen==='squad') c.innerHTML = viewSquad();
@@ -1430,7 +1433,8 @@ function render(){
   else if(state.screen==='board') c.innerHTML = viewBoard();
   else if(state.screen==='venue'){ c.innerHTML = viewVenue(); setTimeout(initVenueDisplayMap, 60); }
   else if(state.screen==='poll') c.innerHTML = viewPoll();
-  c.scrollTop = 0;
+  c.scrollTop = keepScroll ? savedTop : 0;
+  state._rScreen = state.screen;
   renderTabs();
   if(state.screen==='form') initPitchDrag();
 }
@@ -2303,7 +2307,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.60</p>';
+  + '<p class="hint">동네 축구왕 · v0.61</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
