@@ -2343,7 +2343,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.67</p>';
+  + '<p class="hint">동네 축구왕 · v0.68</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
@@ -5037,7 +5037,23 @@ function initBackButton_(){
     // 여기서 재푸시하지 않으면 브라우저가 실제 뒤로가기(앱 종료)를 수행
   });
 }
+/* 모바일 뷰포트 높이 보정: 일부 브라우저/홈화면 PWA에서 100dvh가 실제 보이는 높이보다 커서
+   하단 탭바가 화면 밖(시스템 내비 뒤)으로 밀려 사라지는 문제 방지. 실제 innerHeight로 폰 높이 고정 */
+function fitPhone_(){
+  try{
+    var ph=document.querySelector('.phone'); if(!ph) return;
+    if(window.matchMedia && window.matchMedia('(max-width:459px)').matches){
+      // window.innerHeight = 현재 레이아웃 뷰포트(브라우저 UI 반영). 키보드로는 안 바뀌어 레이아웃 튐 없음.
+      var h=window.innerHeight;
+      if(h && h>200) ph.style.height=Math.round(h)+'px';
+    } else { ph.style.height=''; }
+  }catch(e){}
+}
 (function(){
+  fitPhone_();
+  window.addEventListener('resize', fitPhone_);
+  window.addEventListener('orientationchange', function(){ setTimeout(fitPhone_, 250); });
+  setTimeout(fitPhone_, 300); setTimeout(fitPhone_, 1200);
   try{ initPTR_(); }catch(e){}
   try{ initBackButton_(); }catch(e){}
   stashVote_();   // 투표 링크 대상 저장 (로그인/리다이렉트로 URL 사라져도 유지)
