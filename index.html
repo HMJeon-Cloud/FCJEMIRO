@@ -2343,7 +2343,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.68</p>';
+  + '<p class="hint">동네 축구왕 · v0.69</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
@@ -2428,7 +2428,9 @@ function handleImportFile_(file, type){
     var r=new FileReader();
     r.onload=function(e){
       try{
-        var wb=XLSX.read(new Uint8Array(e.target.result), {type:'array', cellDates:true});
+        // cellDates:true 미사용 — 날짜/시간을 엑셀 일련번호(숫자)로 받아 d_()/t_()에서 UTC 기준으로 변환
+        // (한국시간대 등에서 cellDates가 로컬 보정으로 날짜 하루 밀림·시간 08:00→23:32 되던 문제 방지)
+        var wb=XLSX.read(new Uint8Array(e.target.result), {type:'array'});
         if(has3TabFormat_(wb)){ import3Tab_(wb); return; }   // 3탭 기록 양식(선수 출석/선수 기록/경기 기록) 자동 감지
         var ws=wb.Sheets[wb.SheetNames[0]];
         var rows=XLSX.utils.sheet_to_json(ws, {defval:''});
@@ -2456,7 +2458,7 @@ function d_(v){
 function t_(v){
   if(v===undefined||v===null||v==='') return '';
   if(Object.prototype.toString.call(v)==='[object Date]'){ if(isNaN(v.getTime())) return ''; return ('0'+v.getUTCHours()).slice(-2)+':'+('0'+v.getUTCMinutes()).slice(-2); }
-  if(typeof v==='number' && isFinite(v) && v>0 && v<1){ var mins=Math.round(v*24*60); return ('0'+Math.floor(mins/60)).slice(-2)+':'+('0'+(mins%60)).slice(-2); }
+  if(typeof v==='number' && isFinite(v) && v>0){ var frac=(v<1)?v:(v-Math.floor(v)); var mins=Math.round(frac*24*60)%1440; return ('0'+Math.floor(mins/60)).slice(-2)+':'+('0'+(mins%60)).slice(-2); }
   var s=String(v).trim(); var mt=s.match(/(\d{1,2}):(\d{2})/); if(mt) return ('0'+mt[1]).slice(-2)+':'+mt[2];
   return '';
 }
