@@ -1618,7 +1618,10 @@ function viewSquad(){
       + venueBtn
       + '</div>';
   }).join('');
-  return addBtn + '<div class="eyebrow" style="margin-top:14px;">등록된 경기 · '+state.matches.length+'</div>' + cards
+  var emptyN = isAdmin() ? emptyMatchCount_() : 0;
+  var cleanBtn = emptyN>0 ? '<button class="btn-ghost btn-danger" style="width:100%;margin:8px 0 0;" onclick="cleanupEmptyMatches_()">🧹 빈 경기 정리 ('+emptyN+'건)</button>'
+    + '<p class="hint" style="margin:6px 2px 0;">상대팀·결과가 없는 잘못 생성된 경기를 한 번에 삭제해요.</p>' : '';
+  return addBtn + '<div class="eyebrow" style="margin-top:14px;">등록된 경기 · '+state.matches.length+'</div>' + cards + cleanBtn
     + '<p class="hint">'+(isAdmin()?'경기를 탭하면 수정할 수 있습니다.<br>':'')+'스쿼드(포메이션) 작성은 스쿼드 탭에서 관리합니다.</p>';
 }
 
@@ -2346,7 +2349,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.73</p>';
+  + '<p class="hint">동네 축구왕 · v0.74</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
@@ -3967,6 +3970,31 @@ function doDeleteMatch(id){
   closeSheet(); toast('경기를 삭제했습니다');
   if(state.squadMatchId){ loadMatchSquads(state.squadMatchId); } else { state.matchSquads=[]; state.currentMatch=null; state.squadDetail=null; render(); }
   API.run('deleteMatch', id).then(function(list){ state.matches = list; }).catch(function(){ toast('삭제 저장 실패 · 새로고침'); });
+}
+/* 빈 경기 = 상대팀·결과·점수가 모두 없는 경기 (잘못 자동 생성된 경기) */
+function isEmptyMatch_(m){
+  var noOpp = !m.opponent || String(m.opponent).trim()==='';
+  var noScore = (m.ourScore==null || m.ourScore==='') && (m.oppScore==null || m.oppScore==='');
+  var noResult = !(m.result==='W'||m.result==='D'||m.result==='L');
+  return noOpp && noScore && noResult;
+}
+function emptyMatchCount_(){ return (state.matches||[]).filter(isEmptyMatch_).length; }
+function cleanupEmptyMatches_(){
+  if(!requireAdmin()) return;
+  var empties=(state.matches||[]).filter(isEmptyMatch_);
+  if(!empties.length){ toast('정리할 빈 경기가 없어요'); return; }
+  appConfirm_('상대팀·결과가 없는 빈 경기 '+empties.length+'건을 삭제할까요?\n(잘못 생성된 경기 정리용 · 관련 기록도 함께 정리)', function(){
+    var ids=empties.map(function(m){return m.id;});
+    state.matches=(state.matches||[]).filter(function(m){return ids.indexOf(m.id)<0;});   // 낙관적 즉시 제거
+    if(ids.indexOf(state.squadMatchId)>-1){ state.squadMatchId = state.matches.length ? state.matches[0].id : null; state.currentSquadId=null; state.matchSquads=[]; state.currentMatch=null; state.squadDetail=null; }
+    var chain=Promise.resolve();
+    ids.forEach(function(id){ chain=chain.then(function(){ return API.run('deleteMatch', id).then(function(list){ if(list) state.matches=list; }); }); });
+    chain.then(function(){
+      state.recLoaded=false; state.matchesLoaded=true;
+      toast('빈 경기 '+ids.length+'건을 정리했어요');
+      render();
+    }).catch(function(){ toast('일부 삭제 실패 · 새로고침 후 확인해주세요'); render(); });
+  });
 }
 
 /* ================= 선수 편성 ================= */
