@@ -2307,7 +2307,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.61</p>';
+  + '<p class="hint">동네 축구왕 · v0.62</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
@@ -2712,6 +2712,7 @@ function openPollDetail(pollId){
 function renderPollDetail(d){
   if(!d || !d.poll){ toast('투표를 찾을 수 없습니다'); return; }
   var p=d.poll; var st=POLL_STATUS[p.status]||POLL_STATUS.open;
+  state.currentPollTitle = p.title;   // 공유 카드용
   state.voteChoices = (d.myChoices||[]).slice();
   var max=Math.max.apply(null,d.results.map(function(r){return r.count;}).concat([1]));
   var bars=d.results.map(function(r){
@@ -2779,6 +2780,14 @@ function renderPollDetail(d){
       + '<button class="btn-ghost" style="margin-top:9px;" onclick="openApplyToMatch(\''+p.id+'\')">📋 경기별 참석자 인원 적용</button>'
     : '';
 
+  // 공유 (모든 팀원) — 링크 복사 + 카카오톡 카드
+  var shareRow = '<div class="field" style="margin-top:16px;"><label>투표 공유</label>'
+    + '<div style="display:flex;gap:9px;">'
+    +   '<button class="btn-primary" style="flex:1;margin:0;background:#FEE500;color:rgba(0,0,0,.85);" onclick="sharePollKakao_(\''+p.id+'\')">💬 카카오톡 공유</button>'
+    +   '<button class="btn-ghost" style="flex:1;margin:0;" onclick="sharePollLink_(\''+p.id+'\')">🔗 링크 복사</button>'
+    + '</div>'
+    + '<p style="font-size:11px;color:var(--steel-soft);margin:7px 2px 0;">단톡방에 공유하면 팀원이 링크로 바로 이 투표에 참여해요.</p></div>';
+
   var adminBtns = canManagePoll_(p) ? '<div style="display:flex;gap:9px;margin-top:14px;">'
     +     (p.status==='open'?'<button class="btn-ghost" style="flex:1;margin:0;" onclick="closePollConfirm(\''+p.id+'\')">투표 마감</button>':'')
     +     '<button class="btn-ghost btn-danger" style="flex:1;margin:0;" onclick="deletePollConfirm(\''+p.id+'\')">삭제</button>'
@@ -2793,7 +2802,7 @@ function renderPollDetail(d){
    +     '<span style="margin-left:auto;font-size:12px;color:var(--steel);">'+d.totalVotes+'/'+d.totalMembers+'명 참여</span></div>'
    +   '<div class="field"><label>결과'+(p.anon?' <span style="color:var(--steel-soft);font-weight:600;">(익명)</span>':'')+'</label>'+bars+'</div>'
    +   '<div class="field"><label>미투표자 · '+d.nonVoters.length+'명</label>'+nonV+'</div>'
-   +   voteArea + extraSec + assignBtn + adminBtns
+   +   voteArea + extraSec + shareRow + assignBtn + adminBtns
    + '</div>';
   showSheet(html);
 }
@@ -3961,7 +3970,8 @@ var MANUAL = [
   {id:'poll', label:'투표', title:'🗳️ 투표', body: function(){ return ''
     + mnRow_('✋','<b>누구나</b> 투표를 만들 수 있어요 — 참석 조사, 회식 메뉴 등!')
     + mnRow_('🔒','마감·삭제는 <b>만든 사람과 임원만</b> 할 수 있어요.')
-    + mnRow_('📋','참석 투표는 임원이 <b>"참석자 적용"</b>으로 경기 명단·스쿼드에 바로 반영할 수 있어요.'); }},
+    + mnRow_('📋','참석 투표는 임원이 <b>"참석자 적용"</b>으로 경기 명단·스쿼드에 바로 반영할 수 있어요.')
+    + mnRow_('🔗','투표 상세에서 <b>카카오톡·링크로 공유</b>하면, 팀원이 단톡방 링크를 눌러 바로 투표해요.'); }},
   {id:'board', label:'게시판', title:'📢 게시판', body: function(){ return ''
     + mnRow_('📌','<b>공지는 임원만</b> 작성해요. 중요한 공지는 상단 고정!')
     + mnRow_('💬','<b>건의사항은 누구나</b> 쓸 수 있어요. 삭제는 작성자 본인 또는 임원.'); }},
@@ -4058,6 +4068,48 @@ function invitePid(){
     for(var i=0;i<parts.length;i++){ var kv=parts[i].split('='); if(kv[0]==='p') return decodeURIComponent(kv[1]||''); }
   }catch(e){}
   return '';
+}
+/* 투표 링크 파싱: ?vote=투표ID&c=팀ID */
+function voteParams_(){
+  try{
+    var s=(location.search||''); if(s.charAt(0)==='?') s=s.slice(1);
+    var pollId='', clubId=''; s.split('&').forEach(function(kv){ var p=kv.split('='); if(p[0]==='vote') pollId=decodeURIComponent(p[1]||''); if(p[0]==='c') clubId=decodeURIComponent(p[1]||''); });
+    return pollId ? {pollId:pollId, clubId:clubId} : null;
+  }catch(e){ return null; }
+}
+/* 투표 공유용 URL / 카카오톡 SDK / 공유 */
+function pollShareUrl_(pollId){
+  return location.origin + location.pathname + '?vote=' + encodeURIComponent(pollId) + '&c=' + encodeURIComponent(state.activeClubId||'');
+}
+var kakaoShareTried=false;
+function ensureKakaoShare_(cb){
+  if(window.Kakao && Kakao.Share){ try{ if(!Kakao.isInitialized()) Kakao.init(KAKAO_JS_KEY); }catch(e){} cb(!!(window.Kakao&&Kakao.Share)); return; }
+  if(!KAKAO_JS_KEY){ cb(false); return; }
+  var fin=function(){ try{ if(window.Kakao && !Kakao.isInitialized()) Kakao.init(KAKAO_JS_KEY); }catch(e){} cb(!!(window.Kakao&&Kakao.Share)); };
+  var s=document.createElement('script'); s.src='https://t1.kakaocdn.net/kakao_js_sdk/2.7.2/kakao.min.js';
+  s.onload=fin; s.onerror=function(){ cb(false); };
+  document.head.appendChild(s);
+  setTimeout(fin, 4000);
+}
+function sharePollLink_(pollId){
+  var url=pollShareUrl_(pollId), title=state.currentPollTitle||'투표';
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(function(){ toast('투표 링크가 복사되었습니다 · 단톡방에 붙여넣기'); }).catch(function(){ fallbackCopy_(url); });
+  } else { fallbackCopy_(url); }
+}
+function sharePollKakao_(pollId){
+  var url=pollShareUrl_(pollId), title=state.currentPollTitle||'투표';
+  var base=location.origin + location.pathname.replace(/[^\/]*$/, '');
+  ensureKakaoShare_(function(ok){
+    if(!ok || !window.Kakao || !Kakao.Share){ toast('카카오 공유를 쓸 수 없어 링크를 복사했어요'); sharePollLink_(pollId); return; }
+    try{
+      Kakao.Share.sendDefault({
+        objectType:'feed',
+        content:{ title:'🗳️ '+title, description:ourTeamName_()+' 투표에 참여해 주세요!', imageUrl:base+'logo.png', link:{ mobileWebUrl:url, webUrl:url } },
+        buttons:[{ title:'투표하러 가기', link:{ mobileWebUrl:url, webUrl:url } }]
+      });
+    }catch(e){ toast('카카오 공유 실패 · 링크를 복사했어요'); sharePollLink_(pollId); }
+  });
 }
 function showLogin(){
   state.loginView = 'home';
@@ -4778,6 +4830,13 @@ function afterLogin_(){
     state.screen='club'; applyAppHeader(); render(); return;
   }
   refreshMyJoins_();
+  // 투표 링크(?vote=투표ID&c=팀ID)로 진입 → 그 팀 입장 후 투표 바로 열기
+  var vp = voteParams_();
+  if(vp && vp.pollId && vp.clubId){
+    try{ history.replaceState(null,'',location.pathname); }catch(e){}
+    if(canEnterClub(vp.clubId)){ enterClub(vp.clubId, null, vp.pollId); return; }
+    toast('이 투표는 해당 팀 소속만 참여할 수 있어요');
+  }
   var ids = myClubIds();
   var last = state.auth && state.auth.lastClub;
   var lastScreen = state.auth && state.auth.lastScreen;   // 새로고침 시 마지막 화면 복원
@@ -4785,7 +4844,7 @@ function afterLogin_(){
   else if(ids.length===1){ enterClub(ids[0], lastScreen); }
   else { state.activeClubId=null; ACTIVE_CLUB=null; state.screen='club'; applyAppHeader(); render(); }
 }
-function enterClub(clubId, restoreScreen){
+function enterClub(clubId, restoreScreen, openPollId){
   if(isGuest()){ toast('게스트는 팀에 입장할 수 없어요. 로그인 후 이용하세요.'); return; }
   if(!canEnterClub(clubId)){ toast('가입되지 않은 팀입니다'); return; }
   state.activeClubId = clubId; ACTIVE_CLUB = clubId; window.ACTIVE_CLUB = clubId;
@@ -4800,6 +4859,7 @@ function enterClub(clubId, restoreScreen){
   // 새로고침 복원: 팀 데이터 로드 후 마지막 화면으로 이동 (수동 팀 전환 시엔 restoreScreen 없음 → 팀원 화면)
   var validRestore = {team:1,squad:1,form:1,record:1,att:1,more:1,board:1,poll:1,venue:1,club:1};
   state._pendingScreen = (restoreScreen && validRestore[restoreScreen] && restoreScreen!=='team') ? restoreScreen : null;
+  state._pendingPoll = openPollId || null;   // 투표 링크 진입 시 열 투표
   API.run('bootstrap');  // no-op warmup
   loadClubData_();
 }
@@ -4807,6 +4867,8 @@ function loadClubData_(){
   state.loading=true; render();
   Promise.all([API.run('getPlayers'), API.run('getMatches')]).then(function(r){
     state.players=r[0]||[]; state.matches=r[1]||[]; state.matchesLoaded=true; state.loading=false;
+    var pp=state._pendingPoll; state._pendingPoll=null;
+    if(pp){ state.screen='poll'; if(state.auth) state.auth.lastScreen='poll'; go('poll'); openPollDetail(pp); return; }   // 투표 링크 진입
     var ps=state._pendingScreen; state._pendingScreen=null;
     if(ps){ go(ps); return; }   // 마지막 화면으로 복원 (탭별 지연 로드 포함)
     if(state.screen==='team') render();
