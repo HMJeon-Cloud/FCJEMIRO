@@ -1517,7 +1517,10 @@ function viewTeam(){
   var players = state.players.slice().sort(numSort);
   var body = players.length ? players.map(playerCard).join('') :
     '<div class="empty"><div class="ei">⚽</div>등록된 팀원이 없습니다.<br>우측 하단 + 버튼으로 추가하세요.</div>';
-  var invite = isAdmin() ? '<button class="btn-ghost" style="width:100%;margin:0 0 12px;" onclick="copyInviteLink()">🔗 팀 초대 링크 복사</button>' : '';
+  var invite = isAdmin() ? ('<div style="display:flex;gap:8px;margin:0 0 12px;">'
+    + '<button class="btn-ghost" style="flex:1;" onclick="inviteTeamKakao_()">💬 카카오톡 초대</button>'
+    + '<button class="btn-ghost" style="flex:1;" onclick="copyInviteLink()">🔗 링크 복사</button>'
+    + '</div>') : '';
   var joinSec = '';
   if(isAdmin()){
     if(state.clubJoinReqs==null){
@@ -2343,7 +2346,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.69</p>';
+  + '<p class="hint">동네 축구왕 · v0.70</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
@@ -3569,7 +3572,10 @@ function openPlayerForm(id){
    +   '<button class="btn-primary" onclick="savePlayer()">'+(id?'수정 완료':'등록하기')+'</button>'
    +   ((id && isAdmin()) ? ((p&&(p.accountId||p.ownerId))
               ? '<div class="field" style="margin-top:10px;"><label>계정 연결</label><div style="font-size:13px;color:var(--steel-soft);padding:6px 0;">✅ 이 팀원은 계정과 연결되어 있어요.</div></div>'
-              : '<button class="btn-ghost" style="margin-top:8px;" onclick="copyMemberInvite(\''+id+'\')">🔗 이 팀원 초대 링크 복사</button>'
+              : '<div style="display:flex;gap:8px;margin-top:8px;">'
+                +'<button class="btn-ghost" style="flex:1;" onclick="inviteMemberKakao_(\''+id+'\')">💬 카카오톡 초대</button>'
+                +'<button class="btn-ghost" style="flex:1;" onclick="copyMemberInvite(\''+id+'\')">🔗 링크 복사</button>'
+                +'</div>'
                 +'<p class="hint" style="margin:6px 2px 0;">이 링크로 로그인하면 <b>이 팀원 정보에 계정이 연결</b>돼요.</p>') : '')
    +   ((id && isAdmin())?'<button class="btn-ghost btn-danger" onclick="deletePlayer(\''+id+'\')">이 팀원 삭제</button>':'')
    + '</div>';
@@ -4528,6 +4534,29 @@ function copyMemberInvite(pid){
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(url).then(function(){ toast('팀원 초대 링크를 복사했어요'); }, function(){ prompt('아래 링크를 이 팀원에게 보내세요', url); });
   } else { prompt('아래 링크를 이 팀원에게 보내세요', url); }
+}
+/* 카카오톡으로 초대: '팀명'에서 당신을 초대합니다 카드 (팀명은 앱에서 직접 넣어 표시) */
+function inviteTeamUrl_(){ return location.origin + location.pathname + '?t=' + encodeURIComponent(state.activeClubId||''); }
+function inviteMemberUrl_(pid){ return location.origin + location.pathname + '?t=' + encodeURIComponent(state.activeClubId||'') + '&p=' + encodeURIComponent(pid); }
+function shareInviteKakao_(url, memberName, copyMsg){
+  var team = ourTeamName_() || '우리 팀';
+  var desc = memberName ? (memberName + '님, 링크를 눌러 팀에 합류하세요!') : '링크를 눌러 팀에 합류하세요!';
+  ensureKakaoShare_(function(ok){
+    if(!ok || !window.Kakao || !Kakao.Share){ toast('카카오 공유를 쓸 수 없어 링크를 복사했어요'); fallbackCopy_(url); return; }
+    try{
+      Kakao.Share.sendDefault({
+        objectType:'feed',
+        content:{ title:'⚽ \''+team+'\'에서 당신을 초대합니다', description:desc, imageUrl:pollCardImage_(), link:{ mobileWebUrl:url, webUrl:url } },
+        buttons:[{ title:'팀 합류하기', link:{ mobileWebUrl:url, webUrl:url } }]
+      });
+    }catch(e){ toast('카카오 공유 실패 · 링크를 복사했어요'); fallbackCopy_(url); }
+  });
+}
+function inviteTeamKakao_(){ if(!state.activeClubId){ toast('먼저 팀을 선택하세요'); return; } shareInviteKakao_(inviteTeamUrl_(), null); }
+function inviteMemberKakao_(pid){
+  if(!state.activeClubId){ toast('먼저 팀을 선택하세요'); return; }
+  var p=(state.players||[]).filter(function(x){return x.id===pid;})[0];
+  shareInviteKakao_(inviteMemberUrl_(pid), p?p.name:null);
 }
 /* 앱 스타일 확인 모달 */
 var _cfmCb=null;
