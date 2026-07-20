@@ -2307,7 +2307,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.62</p>';
+  + '<p class="hint">동네 축구왕 · v0.63</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
@@ -4077,6 +4077,21 @@ function voteParams_(){
     return pollId ? {pollId:pollId, clubId:clubId} : null;
   }catch(e){ return null; }
 }
+/* 투표 링크 대상 저장/복원 — 로그인(특히 카카오 리다이렉트)으로 URL이 사라져도 유지 */
+function stashVote_(){ var vp=voteParams_(); if(vp && vp.pollId){ try{ localStorage.setItem('kj_vote', JSON.stringify({p:vp.pollId, c:vp.clubId, ts:Date.now()})); }catch(e){} } }
+function pendingVote_(){
+  var vp=voteParams_(); if(vp && vp.pollId) return vp;
+  try{ var s=localStorage.getItem('kj_vote'); if(s){ var o=JSON.parse(s); if(o && o.p && (Date.now()-(o.ts||0) < 3600000)) return {pollId:o.p, clubId:o.c||''}; } }catch(e){}
+  return null;
+}
+function clearVote_(){ try{ localStorage.removeItem('kj_vote'); }catch(e){} try{ history.replaceState(null,'',location.pathname); }catch(e){} }
+/* 카카오 공유 카드 이미지: 팀 엠블럼(공개 URL만) → 없으면 앱 로고. 카카오는 data-URI 불가 */
+function pollCardImage_(){
+  var c=(state.clubs||[]).filter(function(x){return x.id===state.activeClubId;})[0];
+  var em=c && c.emblem;
+  if(em && /^https?:\/\//i.test(em)) return em;
+  return location.origin + location.pathname.replace(/[^\/]*$/, '') + 'logo.png';
+}
 /* 투표 공유용 URL / 카카오톡 SDK / 공유 */
 function pollShareUrl_(pollId){
   return location.origin + location.pathname + '?vote=' + encodeURIComponent(pollId) + '&c=' + encodeURIComponent(state.activeClubId||'');
@@ -4099,13 +4114,12 @@ function sharePollLink_(pollId){
 }
 function sharePollKakao_(pollId){
   var url=pollShareUrl_(pollId), title=state.currentPollTitle||'투표';
-  var base=location.origin + location.pathname.replace(/[^\/]*$/, '');
   ensureKakaoShare_(function(ok){
     if(!ok || !window.Kakao || !Kakao.Share){ toast('카카오 공유를 쓸 수 없어 링크를 복사했어요'); sharePollLink_(pollId); return; }
     try{
       Kakao.Share.sendDefault({
         objectType:'feed',
-        content:{ title:'🗳️ '+title, description:ourTeamName_()+' 투표에 참여해 주세요!', imageUrl:base+'logo.png', link:{ mobileWebUrl:url, webUrl:url } },
+        content:{ title:'🗳️ '+title, description:ourTeamName_()+' 투표에 참여해 주세요!', imageUrl:pollCardImage_(), link:{ mobileWebUrl:url, webUrl:url } },
         buttons:[{ title:'투표하러 가기', link:{ mobileWebUrl:url, webUrl:url } }]
       });
     }catch(e){ toast('카카오 공유 실패 · 링크를 복사했어요'); sharePollLink_(pollId); }
@@ -4140,7 +4154,9 @@ function authBody_(){
 function homeView_(){
   var inviteBanner = inviteClubId()
     ? '<div class="auth-team-name">🔗 초대 링크로 접속했어요<br><span style="font-size:12px;font-weight:400;color:rgba(255,255,255,.75);">로그인하면 팀에 바로 합류합니다</span></div>'
-    : '';
+    : (pendingVote_()
+      ? '<div class="auth-team-name">🗳️ 투표 링크로 접속했어요<br><span style="font-size:12px;font-weight:400;color:rgba(255,255,255,.75);">로그인하면 해당 투표로 바로 이동합니다</span></div>'
+      : '');
   return '<div class="auth-form">'
     + inviteBanner
     + '<button class="auth-btn" onclick="gotoAuth(\'owner\')">로그인 / 회원가입</button>'
@@ -4787,6 +4803,7 @@ if('serviceWorker' in navigator){
 function hideSplash_(){ var s=document.getElementById('splash'); if(s){ s.style.opacity='0'; setTimeout(function(){ s.style.display='none'; }, 240); } }
 setTimeout(hideSplash_, 9000);   // 안전장치: 무슨 일이 있어도 스플래시는 사라짐
 (function(){
+  stashVote_();   // 투표 링크 대상 저장 (로그인/리다이렉트로 URL 사라져도 유지)
   var hash = location.hash || '';
   var hasKs = /[#&]ks=/.test(hash);
   var sess = loadSession();
@@ -4830,10 +4847,10 @@ function afterLogin_(){
     state.screen='club'; applyAppHeader(); render(); return;
   }
   refreshMyJoins_();
-  // 투표 링크(?vote=투표ID&c=팀ID)로 진입 → 그 팀 입장 후 투표 바로 열기
-  var vp = voteParams_();
+  // 투표 링크(?vote=투표ID&c=팀ID)로 진입 → 그 팀 입장 후 투표 바로 열기 (로그인 후에도 복원)
+  var vp = pendingVote_();
   if(vp && vp.pollId && vp.clubId){
-    try{ history.replaceState(null,'',location.pathname); }catch(e){}
+    clearVote_();
     if(canEnterClub(vp.clubId)){ enterClub(vp.clubId, null, vp.pollId); return; }
     toast('이 투표는 해당 팀 소속만 참여할 수 있어요');
   }
