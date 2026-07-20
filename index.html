@@ -1448,10 +1448,20 @@ function render(){
   else if(state.screen==='venue'){ c.innerHTML = viewVenue(); setTimeout(initVenueDisplayMap, 60); }
   else if(state.screen==='poll') c.innerHTML = viewPoll();
   c.scrollTop = keepScroll ? savedTop : 0;
+  // 칩 줄(연/월·상대팀 등) 가로 스크롤 위치 복원 → 오른쪽으로 넘긴 뒤 선택해도 맨 왼쪽으로 안 튐
+  if(state._chipScroll){
+    Array.prototype.forEach.call(c.querySelectorAll('.chips[data-sk]'), function(el){
+      var k=el.getAttribute('data-sk'); if(state._chipScroll[k]!=null) el.scrollLeft=state._chipScroll[k];
+    });
+  }
+  // 로그인 상태에서 앱 화면을 그릴 때는 하단 탭바가 항상 보이도록 보장 (새로고침 후 탭 사라짐 방지)
+  var tb=document.getElementById('tabbar'); if(tb) tb.style.display='flex';
   state._rScreen = state.screen;
   renderTabs();
   if(state.screen==='form') initPitchDrag();
 }
+/* 칩 줄 가로 스크롤 위치 저장 (렌더 시 복원용) */
+function saveChipScroll_(k, el){ state._chipScroll=state._chipScroll||{}; state._chipScroll[k]=el.scrollLeft; }
 
 function initPitchDrag(){
   if(!isAdmin()) return;
@@ -1902,11 +1912,11 @@ function viewRecord(){
     var on = (o.v==='전체') ? (state.recPeriod==='전체') : (curYear===o.v);
     return '<div class="chip '+(on?'on':'')+'" onclick="setPeriod(\''+o.v+'\')">'+o.l+'</div>';
   }).join('');
-  var chips = '<div class="chips">'+row1+'</div>';
+  var chips = '<div class="chips" data-sk="recY" onscroll="saveChipScroll_(\'recY\',this)">'+row1+'</div>';
   if(curYear){
     var mons = recMonths().filter(function(mm){ return mm.slice(0,4)===curYear; });
     if(mons.length){
-      chips += '<div class="chips" style="margin-top:6px;">'
+      chips += '<div class="chips" data-sk="recM" onscroll="saveChipScroll_(\'recM\',this)" style="margin-top:6px;">'
         + '<div class="chip '+(state.recPeriod===curYear?'on':'')+'" onclick="setPeriod(\''+curYear+'\')">연간</div>'
         + mons.map(function(mm){ return '<div class="chip '+(state.recPeriod===mm?'on':'')+'" onclick="setPeriod(\''+mm+'\')">'+(mm.slice(5,7)*1)+'월</div>'; }).join('')
         + '</div>';
@@ -2024,7 +2034,7 @@ function viewH2H(){
       + '<div style="font-size:11px;color:var(--red);font-weight:700;margin-top:6px;">상세 보기 ›</div></div>';
   }).join('');
 
-  return '<div class="chips">'+chips+'</div>' + summary
+  return '<div class="chips" data-sk="h2h" onscroll="saveChipScroll_(\'h2h\',this)">'+chips+'</div>' + summary
     + '<div class="section"><div class="eyebrow">경기 목록 · '+ms.length+'경기</div>'+list+'</div>'
     + '<p class="hint">경기를 탭하면 스코어·득점·도움·출석·스쿼드를 볼 수 있습니다.</p>';
 }
@@ -2333,7 +2343,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.66</p>';
+  + '<p class="hint">동네 축구왕 · v0.67</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
@@ -2553,15 +2563,18 @@ function parse3Tab_(wb, cid, players){
     }
     Object.keys(agg).forEach(function(kk){ var x=agg[kk]; stats.push({matchId:x.mid, playerId:x.pid, goals:x.g, assists:x.a}); });
   }
-  // 3) 선수 출석 → 출석(1) / 불참(-1). 빈칸=기록 없음(미정)
+  // 3) 선수 출석 → 출석(1) / 불참(-1) / 빈칸=미참석(excused).  (출석 체크 사용 경기만)
+  var midUseAtt={}; matches.forEach(function(m){ midUseAtt[m.id]=(m.useAtt!==false); });
   var att=[], at=aoa_(wb,'선수 출석');
   if(at.length){
     var ah=at[0]||[], acols=[]; for(var c=2;c<ah.length;c++){ acols.push(d_(ah[c])); }
     for(var rr=1;rr<at.length;rr++){ var row=at[rr]||[]; var nm2=s_(row[1]); if(!nm2) continue; var pid2=byName[nm2];
-      for(var q=0;q<acols.length;q++){ var dt2=acols[q]; if(!dt2 || !dateToMid[dt2]) continue;
-        var v=row[2+q], status=null; if(v===1||v==='1') status='present'; else if(v===-1||v==='-1') status='absent'; else continue;
-        if(!pid2){ unmatched[nm2]=1; continue; }
-        att.push({matchId:dateToMid[dt2], playerId:pid2, status:status, checkedAt:null});
+      for(var q=0;q<acols.length;q++){ var dt2=acols[q]; var mid2=dt2 && dateToMid[dt2]; if(!mid2) continue;
+        if(!midUseAtt[mid2]) continue;   // 출석 체크 미사용 경기는 출석 생성 안 함
+        var v=row[2+q], hasVal=(v===1||v==='1'||v===-1||v==='-1');
+        var status = (v===1||v==='1') ? 'present' : ((v===-1||v==='-1') ? 'absent' : 'excused'); // 빈칸=미참석
+        if(!pid2){ if(hasVal) unmatched[nm2]=1; continue; }
+        att.push({matchId:mid2, playerId:pid2, status:status, checkedAt:null});
       }
     }
   }
