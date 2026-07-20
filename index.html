@@ -2307,7 +2307,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.64</p>';
+  + '<p class="hint">동네 축구왕 · v0.65</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
@@ -2324,7 +2324,7 @@ function importSection_(){
   +     '<button class="btn-ghost" style="flex:1;" onclick="dlTemplate(\'matches\')">📄 양식 받기</button>'
   +     '<button class="btn-ghost" style="flex:1;" onclick="pickImport(\'matches\')">⬆️ 가져오기</button>'
   +   '</div>'
-  +   '<div class="hint" style="margin:10px 0 0;padding-top:10px;border-top:1px dashed var(--line-strong);">📊 <b>선수 출석·선수 기록·경기 기록</b> 3개 탭으로 된 시즌 기록 파일도 위 “경기 기록 가져오기”에 그대로 올리면 <b>자동 인식</b>돼요. (경기·득점·도움·출석 한 번에 등록)</div>'
+  +   '<div class="hint" style="margin:10px 0 0;padding-top:10px;border-top:1px dashed var(--line-strong);">📊 양식은 <b>선수 출석 · 선수 기록 · 경기 기록</b> 3개 탭으로 되어 있어요. 채워서 “가져오기”에 올리면 <b>경기 등록 · 경기 결과 · 출석</b>이 한 번에 등록돼요.</div>'
   + '</div>';
 }
 /* SheetJS 온디맨드 로드 */
@@ -2343,16 +2343,41 @@ var IMPORT_COLS = {
 function dlTemplate(type){
   loadXLSX_(function(ok){
     if(!ok){ toast('엑셀 모듈을 불러오지 못했어요 (네트워크 확인)'); return; }
+    if(type==='matches'){ dlMatchTemplate3_(); return; }
     var cols = IMPORT_COLS[type];
-    var sample = type==='players'
-      ? [['홍길동',7,'팀원','MF,FW','1995-03-12',176,70,'서울','L']]
-      : [['2025-07-19','15:00','FC 라이온즈','매화 축구장',3,1,'홍길동:2, 김철수','이영희']];
+    var sample = [['홍길동',7,'팀원','MF,FW','1995-03-12',176,70,'서울','L']];
     var aoa=[cols].concat(sample);
     var ws=XLSX.utils.aoa_to_sheet(aoa);
     var wb=XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, type==='players'?'팀원':'경기');
-    XLSX.writeFile(wb, (type==='players'?'팀원_양식':'경기_양식')+'.xlsx');
+    XLSX.utils.book_append_sheet(wb, ws, '팀원');
+    XLSX.writeFile(wb, '팀원_양식.xlsx');
   });
+}
+/* 경기 기록 양식(3탭: 선수 출석 / 선수 기록 / 경기 기록) 다운로드 */
+function dlMatchTemplate3_(){
+  var dates=['2025-12-06','2025-12-13','2025-12-20'];
+  var names=['박재욱','김기정','최현국'];
+  var wb=XLSX.utils.book_new();
+  // 1) 선수 출석 (등번호/이름 + 날짜열) — 출석 1 · 불참 -1 · 빈칸 미정
+  var attH=['등번호','이름'].concat(dates);
+  var attRows=[attH];
+  names.forEach(function(nm,idx){ var row=[idx+1, nm]; dates.forEach(function(_,di){ row.push(di===2?'':(di===1&&idx===2?-1:1)); }); attRows.push(row); });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(attRows), '선수 출석');
+  // 2) 선수 기록 (선수마다 2행[골/도움], 날짜마다 2열[라벨/값])
+  var recH=['이름']; dates.forEach(function(d){ recH.push(d); recH.push(''); });
+  var recRows=[recH];
+  names.forEach(function(nm){
+    var g=[nm]; var a=['']; dates.forEach(function(_,di){ g.push('골'); g.push(di===0?1:''); a.push('도움'); a.push(di===0?1:''); });
+    recRows.push(g); recRows.push(a);
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(recRows), '선수 기록');
+  // 3) 경기 기록 (일자/시간/상대팀/경기장/출석 체크(Y/N)/득점/실점)
+  var gmRows=[['일자','시간','상대팀','경기장','출석 체크(Y/N)','득점','실점'],
+    ['2025-12-06','08:00','FC 라이온즈','수암꿈나무','Y',8,2],
+    ['2025-12-13','08:00','FC 아슬란','희망공원','Y',1,4],
+    ['2025-12-20','15:00','FC 라디앙','성호','N',9,6]];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(gmRows), '경기 기록');
+  XLSX.writeFile(wb, '경기_기록_양식.xlsx');
 }
 function pickImport(type){
   if(!state.activeClubId){ toast('먼저 팀을 선택하세요'); return; }
@@ -2390,6 +2415,14 @@ function d_(v){
   var m=s.match(/(\d{4})[.\-\/\s]+(\d{1,2})[.\-\/\s]+(\d{1,2})/);   // YYYY-MM-DD / YYYY.M.D / YYYY/M/D
   if(m) return m[1]+'-'+('0'+m[2]).slice(-2)+'-'+('0'+m[3]).slice(-2);
   return s;
+}
+/* 시간 정규화 → 'HH:MM' (엑셀 시간 Date·소수·텍스트 처리) */
+function t_(v){
+  if(v===undefined||v===null||v==='') return '';
+  if(Object.prototype.toString.call(v)==='[object Date]'){ if(isNaN(v.getTime())) return ''; return ('0'+v.getUTCHours()).slice(-2)+':'+('0'+v.getUTCMinutes()).slice(-2); }
+  if(typeof v==='number' && isFinite(v) && v>0 && v<1){ var mins=Math.round(v*24*60); return ('0'+Math.floor(mins/60)).slice(-2)+':'+('0'+(mins%60)).slice(-2); }
+  var s=String(v).trim(); var mt=s.match(/(\d{1,2}):(\d{2})/); if(mt) return ('0'+mt[1]).slice(-2)+':'+mt[2];
+  return '';
 }
 /* 행 → 팀원 객체 배열 */
 function rowsToPlayers_(rows, cid){
@@ -2463,11 +2496,19 @@ function aoa_(wb, name){
 function parse3Tab_(wb, cid, players){
   var byName={}; players.forEach(function(p){ byName[p.name]=p.id; });
   var unmatched={}, t=Date.now();
-  // 1) 경기 기록 → 경기 (일자/구장/상대팀/득점/실점)
+  // 1) 경기 기록 → 경기 (헤더 기준: 일자/시간/상대팀/경기장/출석 체크(Y/N)/득점/실점)
   var gm=aoa_(wb,'경기 기록'), matches=[], dateToMid={};
-  for(var i=1;i<gm.length;i++){ var r=gm[i]||[]; var date=d_(r[0]); if(!date) continue;
-    var os=n_(r[3]), ps=n_(r[4]); var mid='g'+t+'_'+i;
-    var mo={id:mid, clubId:cid, date:date, time:'', opponent:s_(r[2]), venue:s_(r[1]), venueUrl:'', useAtt:true};
+  var gh=(gm[0]||[]).map(function(x){ return s_(x); });
+  function gcol_(names){ for(var a=0;a<gh.length;a++){ for(var b=0;b<names.length;b++){ if(gh[a].indexOf(names[b])>-1) return a; } } return -1; }
+  var ci_date=gcol_(['일자','날짜']), ci_time=gcol_(['시간']), ci_opp=gcol_(['상대팀','상대']),
+      ci_venue=gcol_(['경기장','구장','장소']), ci_att=gcol_(['출석']),
+      ci_os=gcol_(['득점','우리점수','우리']), ci_ps=gcol_(['실점','상대점수']);
+  if(ci_date<0) ci_date=0;
+  if(ci_os<0) ci_os=3; if(ci_ps<0) ci_ps=4;
+  for(var i=1;i<gm.length;i++){ var r=gm[i]||[]; var date=d_(r[ci_date]); if(!date) continue;
+    var os=n_(r[ci_os]), ps=n_(r[ci_ps]); var mid='g'+t+'_'+i;
+    var useAtt=true; if(ci_att>-1){ var av=s_(r[ci_att]).toUpperCase(); if(av==='N'||av==='NO'||av==='FALSE'||av==='X') useAtt=false; }
+    var mo={id:mid, clubId:cid, date:date, time:(ci_time>-1?t_(r[ci_time]):''), opponent:s_(r[ci_opp>-1?ci_opp:2]), venue:s_(r[ci_venue>-1?ci_venue:1]), venueUrl:'', useAtt:useAtt};
     if(os!=null && ps!=null){ mo.ourScore=os; mo.oppScore=ps; mo.result=(os>ps?'W':(os<ps?'L':'D')); }
     matches.push(mo); dateToMid[date]=mid;
   }
