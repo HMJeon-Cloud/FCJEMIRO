@@ -318,16 +318,18 @@
   .att-name .an-nm{font-weight:600;font-size:14px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
   .att-when{font-size:10px;color:var(--steel-soft);font-weight:600;white-space:nowrap;letter-spacing:-.01em;}
   .att-ctrls{display:flex;gap:5px;flex:0 0 auto;}
-  .att-b{padding:6px 10px;border:1.5px solid var(--line-strong);border-radius:9px;background:#fff;font-family:inherit;font-size:12.5px;font-weight:700;color:var(--steel);cursor:pointer;}
+  .att-b{padding:6px 7px;border:1.5px solid var(--line-strong);border-radius:9px;background:#fff;font-family:inherit;font-size:11.5px;font-weight:700;color:var(--steel);cursor:pointer;white-space:nowrap;}
   .att-b:disabled{opacity:.55;cursor:default;}
   .att-b.p.on{background:var(--ok);color:#fff;border-color:var(--ok);}
   .att-b.l.on{background:#E0A400;color:#fff;border-color:#E0A400;}
   .att-b.a.on{background:var(--red);color:#fff;border-color:var(--red);}
+  .att-b.e.on{background:var(--steel);color:#fff;border-color:var(--steel);}
   .mijeong{font-size:.6em;letter-spacing:0;color:var(--steel-soft);font-family:'Pretendard';font-weight:600;}
   .att-tag{font-size:12px;font-weight:700;padding:5px 11px;border-radius:8px;}
   .att-tag.p{background:rgba(30,158,106,.14);color:var(--ok);}
   .att-tag.l{background:rgba(224,164,0,.16);color:#B8860B;}
   .att-tag.a{background:rgba(225,19,48,.12);color:var(--red);}
+  .att-tag.e{background:rgba(107,110,118,.14);color:var(--steel);}
   .att-tag.n{background:var(--paper);color:var(--steel-soft);}
   .cmt-row{display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-top:1px dashed var(--line);}
   .cmt-body{flex:1;font-size:12.5px;color:var(--ink-soft);line-height:1.5;}
@@ -378,6 +380,7 @@
   .att-opt.on.present{background:var(--ok);border-color:var(--ok);color:#fff;}
   .att-opt.on.late{background:var(--warn);border-color:var(--warn);color:#fff;}
   .att-opt.on.absent{background:var(--red);border-color:var(--red);color:#fff;}
+  .att-opt.on.excused{background:var(--steel);border-color:var(--steel);color:#fff;}
 
   /* Match report blocks */
   .rep-block{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);align-items:flex-start;}
@@ -1187,19 +1190,21 @@ function buildMatchReport_(matchId){
   var scorers = st.filter(function(s){return (s.goals||0)>0;}).map(function(s){var p=nm(s.playerId);return {num:p.num,name:p.name,goals:s.goals};}).sort(function(a,b){return b.goals-a.goals;});
   var assisters = st.filter(function(s){return (s.assists||0)>0;}).map(function(s){var p=nm(s.playerId);return {num:p.num,name:p.name,assists:s.assists};}).sort(function(a,b){return b.assists-a.assists;});
   var att = DB.attendance.filter(function(x){return x.matchId===matchId;});
-  var attMap={}; att.forEach(function(x){ attMap[x.playerId]=x.status||'present'; });
-  var present=[],late=[],absent=[];
+  var attMap={}; att.forEach(function(x){ attMap[x.playerId]=x.status; });
+  var present=[],late=[],absent=[],excused=[];
   DB.players.forEach(function(p){
     var s = attMap[p.id];
     if(s==='present') present.push(p.name);
     else if(s==='late') late.push(p.name);
-    else absent.push(p.name); // 기록 없으면 불참으로 간주
+    else if(s==='absent') absent.push(p.name);        // 온다 하고 안 옴
+    else if(s==='excused') excused.push(p.name);      // 안 온다고 밝힘
+    // 기록 없음(미정)은 집계 제외 — 전인원 자동 불참 방지
   });
   var quarters = DB.squads.filter(function(s){return s.matchId===matchId;}).map(function(sq){
     var mem = DB.members.filter(function(x){return x.squadId===sq.id;}).map(function(x){var p=nm(x.playerId);return {num:p.num,name:p.name,position:x.position};}).sort(numSort);
     return {name:sq.name, members:mem};
   });
-  return {match:match, scorers:scorers, assisters:assisters, attendance:{present:present,late:late,absent:absent}, quarters:quarters};
+  return {match:match, scorers:scorers, assisters:assisters, attendance:{present:present,late:late,absent:absent,excused:excused}, quarters:quarters};
 }
 function buildSquadDetail_(squadId){
   var squad = DB.squads.filter(function(x){return x.id===squadId;})[0] || null;
@@ -1906,12 +1911,18 @@ function viewRecord(){
     if(!midSet[s.matchId]) return;
     var b=bucket(s.playerId); b.g+=Number(s.goals)||0; b.a+=Number(s.assists)||0;
   });
+  // 출석 점수제: 출석=1, 지각=설정값(기본 0.5), 불참=설정값(기본 -1), 미참석=0
+  var lateScore = (state.cfg.lateScore!=null) ? Number(state.cfg.lateScore) : 0.5;
+  var absentScore = (state.cfg.absentScore!=null) ? Number(state.cfg.absentScore) : -1;
   (state.recAtt||[]).forEach(function(x){
     if(!midSet[x.matchId]) return;
-    bucket(x.playerId).att += 1;
+    if(x.status==='present') bucket(x.playerId).att += 1;
+    else if(x.status==='late') bucket(x.playerId).att += lateScore;
+    else if(x.status==='absent') bucket(x.playerId).att += absentScore;
+    // 미참석(excused) = 0 (집계 제외)
   });
   function top3(key){
-    return Object.keys(agg).map(function(pid){ var p=pname_(pid); return {name:p.name, v:agg[pid][key]}; })
+    return Object.keys(agg).map(function(pid){ var p=pname_(pid); return {name:p.name, v:Math.round(agg[pid][key]*10)/10}; })
       .filter(function(r){ return r.v>0; })
       .sort(function(x,y){ return y.v-x.v; })
       .slice(0,3);
@@ -1919,7 +1930,7 @@ function viewRecord(){
   var boardsHtml = '<div class="boards">'
     + leaderBoard('득점', top3('g'), '골')
     + leaderBoard('도움', top3('a'), '도움')
-    + leaderBoard('출석', top3('att'), '회')
+    + leaderBoard('출석', top3('att'), '점')
     + '</div>';
 
   return seg + '<div class="chips">'+chips+'</div>' + summary
@@ -2003,9 +2014,10 @@ function openMatchReport(matchId){
      +   ((m.venueUrl || (m.lat!=null&&m.lat!=='')) ? '<button class="btn-ghost" style="margin:-4px 0 12px;" onclick="openVenueShare(\''+m.id+'\')">🗺️ 경기장 지도 · 내비 · 공유</button>' : '')
      +   '<div class="rep-block"><span class="rep-k">⚽ 득점</span><span class="rep-v">'+esc(scLine)+'</span></div>'
      +   '<div class="rep-block"><span class="rep-k">🅰️ 도움</span><span class="rep-v">'+esc(asLine)+'</span></div>'
-     +   '<div class="rep-block"><span class="rep-k" style="color:var(--red);">불참 '+att.absent.length+'</span><span class="rep-v">'+(att.absent.length?esc(att.absent.join(', ')):'없음')+'</span></div>'
-     +   '<div class="rep-block"><span class="rep-k" style="color:var(--warn);">지각 '+att.late.length+'</span><span class="rep-v">'+(att.late.length?esc(att.late.join(', ')):'없음')+'</span></div>'
      +   '<div class="rep-block"><span class="rep-k" style="color:var(--ok);">참석 '+att.present.length+'</span><span class="rep-v">'+(att.present.length?esc(att.present.join(', ')):'없음')+'</span></div>'
+     +   '<div class="rep-block"><span class="rep-k" style="color:var(--warn);">지각 '+att.late.length+'</span><span class="rep-v">'+(att.late.length?esc(att.late.join(', ')):'없음')+'</span></div>'
+     +   '<div class="rep-block"><span class="rep-k" style="color:var(--red);">불참 '+att.absent.length+'</span><span class="rep-v">'+(att.absent.length?esc(att.absent.join(', ')):'없음')+'</span></div>'
+     +   '<div class="rep-block"><span class="rep-k" style="color:var(--steel);">미참석 '+(att.excused?att.excused.length:0)+'</span><span class="rep-v">'+(att.excused&&att.excused.length?esc(att.excused.join(', ')):'없음')+'</span></div>'
      +   '<div class="field" style="margin-top:16px;"><label>스쿼드</label>'+(quarters||'<span style="font-size:12px;color:var(--steel-soft);">등록된 스쿼드 없음</span>')+'</div>'
      + '</div>';
     showSheet(html);
@@ -2060,7 +2072,9 @@ function viewAtt(){
 
   var lateLabel = (lateMin===0) ? '경기 시작 시각' : ('경기 시작 '+lateMin+'분 전');
   if(m && m.useAtt===false){ return card + '<p class="hint">출석을 사용하는 경기가 등록되면 여기에서 출석·지각·불참을 기록할 수 있어요.</p>'; }
-  // 출석 설정(체크인 반경·지각 기준)은 임원에게만 노출. 팀원에게는 지각 기준 안내문만 표시
+  // 출석 설정(체크인 반경·지각 기준·점수)은 임원에게만 노출. 팀원에게는 지각 기준 안내문만 표시
+  var lateScore = (state.cfg.lateScore!=null) ? Number(state.cfg.lateScore) : 0.5;
+  var absentScore = (state.cfg.absentScore!=null) ? Number(state.cfg.absentScore) : -1;
   var settingsSec = isAdmin()
     ? ('<div class="section"><div class="eyebrow">출석 설정</div>'
       +   '<div class="card" style="padding:4px 0;">'
@@ -2068,6 +2082,13 @@ function viewAtt(){
       +     cfgRow('지각 기준', (lateMin===0?'정각':lateMin+'분 전'), 'editLate')
       +   '</div>'
       +   '<p style="font-size:11.5px;color:var(--steel-soft);margin:8px 2px 0;">'+lateLabel+'까지 체크인하지 않으면 지각으로 기록됩니다.</p>'
+      +   '<div class="eyebrow" style="margin-top:14px;">출석 점수 (기록 집계)</div>'
+      +   '<div class="card" style="padding:4px 0;">'
+      +     cfgRow('출석 점수', '1점 (고정)', 'scoreFixedNotice')
+      +     cfgRow('지각 점수', scoreLabel_(lateScore), 'editLateScore')
+      +     cfgRow('불참 점수', scoreLabel_(absentScore), 'editAbsentScore')
+      +   '</div>'
+      +   '<p style="font-size:11.5px;color:var(--steel-soft);margin:8px 2px 0;">기록 탭 출석 순위 집계에 반영돼요. (미참석은 0점)</p>'
       + '</div>')
     : ('<p style="font-size:11.5px;color:var(--steel-soft);margin:10px 2px 0;">'+lateLabel+'까지 체크인하지 않으면 지각으로 기록됩니다.</p>');
   return card
@@ -2077,6 +2098,36 @@ function viewAtt(){
 }
 function loadAtt(){
   API.run('getRecordBundle').then(function(b){ state.attData=b||{attendance:[],rosters:[]}; if(state.screen==='att') render(); }).catch(function(){ state.attData={attendance:[],rosters:[]}; if(state.screen==='att') render(); });
+}
+/* 출석 점수 설정 (지각·불참 · 임원 전용) */
+function scoreLabel_(v){ return v+'점'; }
+function scoreFixedNotice(){ toast('출석은 항상 1점으로 고정돼요'); }
+function openScoreSetting_(key, title, desc, options, cur){
+  if(!requireAdmin()) return;
+  var chips = options.map(function(o){
+    return '<button class="chip'+(o.v===cur?' on':'')+'" onclick="saveScoreSetting_(\''+key+'\','+o.v+')">'+o.label+'</button>';
+  }).join('');
+  showSheet('<div class="grabber"></div>'
+   + '<div class="sheet-head"><h3>'+title+'</h3><button class="x" onclick="closeSheet()">✕</button></div>'
+   + '<div class="sheet-body">'
+   +   '<p style="font-size:13px;color:var(--steel);margin:0 0 14px;line-height:1.55;">'+desc+'</p>'
+   +   '<div class="chips">'+chips+'</div>'
+   + '</div>');
+}
+function saveScoreSetting_(key, v){
+  state.cfg[key]=v; closeSheet(); render();
+  toast('저장되었습니다 · '+scoreLabel_(v));
+  API.run('setConfig', key, v).then(function(cfg){ if(cfg) state.cfg=cfg; }).catch(function(){ toast('저장 실패 · 새로고침'); });
+}
+function editLateScore(){
+  var cur = (state.cfg.lateScore!=null) ? Number(state.cfg.lateScore) : 0.5;
+  openScoreSetting_('lateScore','지각 점수','지각한 팀원의 기록 출석 점수예요. (출석은 항상 1점)',
+    [{v:1,label:'1점 (출석과 동일)'},{v:0.5,label:'0.5점 (절반)'}], cur);
+}
+function editAbsentScore(){
+  var cur = (state.cfg.absentScore!=null) ? Number(state.cfg.absentScore) : -1;
+  openScoreSetting_('absentScore','불참 점수','불참(온다 하고 안 온) 팀원의 기록 출석 점수예요.',
+    [{v:0,label:'0점 (감점 없음)'},{v:-1,label:'-1점 (감점)'}], cur);
 }
 function fmtCheckin_(iso){
   if(!iso) return '';
@@ -2100,16 +2151,16 @@ function attMarkingSection(m){
     var nameCell = '<span class="att-name"><span class="an-nm">'+esc(p.name)+'</span>'+when+'</span>';
     if(isAdmin()){
       var btn = function(val,label,cls){ return '<button class="att-b '+cls+(st===val?' on':'')+'" onclick="markAtt(\''+p.id+'\',\''+val+'\')">'+label+'</button>'; };
-      var ctrls = btn('present','출석','p')+btn('late','지각','l')+btn('absent','불참','a');
+      var ctrls = btn('present','출석','p')+btn('late','지각','l')+btn('absent','불참','a')+btn('excused','미참석','e');
       return '<div class="att-row"><span class="att-num oswald">'+numDisp(p.num)+'</span>'+nameCell+'<span class="att-ctrls">'+ctrls+'</span></div>';
     }
     // 팀원: 상태 표시만 (선택 불가)
-    var tag = st==='present'?'<span class="att-tag p">출석</span>' : st==='late'?'<span class="att-tag l">지각</span>' : st==='absent'?'<span class="att-tag a">불참</span>' : '<span class="att-tag n">미정</span>';
+    var tag = st==='present'?'<span class="att-tag p">출석</span>' : st==='late'?'<span class="att-tag l">지각</span>' : st==='absent'?'<span class="att-tag a">불참</span>' : st==='excused'?'<span class="att-tag e">미참석</span>' : '<span class="att-tag n">미정</span>';
     return '<div class="att-row"><span class="att-num oswald">'+numDisp(p.num)+'</span>'+nameCell+tag+'</div>';
   }).join('');
   var head = full
-    ? '<div class="eyebrow">출석 체크 · 참석 명단 '+players.length+'명</div><p style="font-size:11.5px;color:var(--steel-soft);margin:0 0 6px;">참석 명단 인원의 출석·지각·불참을 기록합니다.</p>'
-    : '<div class="eyebrow">출석 체크</div><p style="font-size:11.5px;color:var(--steel-soft);margin:0 0 6px;">전체 팀원의 출석·지각·불참을 기록합니다. (투표의 “참석자 적용”으로 명단을 좁힐 수 있어요)</p>';
+    ? '<div class="eyebrow">출석 체크 · 참석 명단 '+players.length+'명</div><p style="font-size:11.5px;color:var(--steel-soft);margin:0 0 6px;">참석 명단 인원의 출석·지각·불참·미참석을 기록합니다.<br><b>불참</b>=온다 하고 안 옴 · <b>미참석</b>=안 온다고 밝힘</p>'
+    : '<div class="eyebrow">출석 체크</div><p style="font-size:11.5px;color:var(--steel-soft);margin:0 0 6px;">전체 팀원의 출석·지각·불참·미참석을 기록합니다.<br><b>불참</b>=온다 하고 안 옴 · <b>미참석</b>=안 온다고 밝힘 (투표의 “참석자 적용”으로 명단을 좁힐 수 있어요)</p>';
   return '<div class="section">'+head+'<div class="att-list">'+rows+'</div></div>';
 }
 function markAtt(pid, status){
@@ -2244,7 +2295,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.57</p>';
+  + '<p class="hint">동네 축구왕 · v0.59</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
@@ -3791,7 +3842,7 @@ function openResultForm(matchId){
       +   '<input id="st_a_'+p.id+'" type="number" inputmode="numeric" min="0" value="'+(st.a||0)+'" style="width:40px;padding:7px 3px;border:1.5px solid var(--line-strong);border-radius:9px;text-align:center;font-family:inherit;font-size:14px;">'
       + '</div>'
       + '<div class="att-seg" style="margin-top:6px;">'
-      +   attSeg(p.id,'present','참석',cur) + attSeg(p.id,'late','지각',cur) + attSeg(p.id,'absent','불참',cur)
+      +   attSeg(p.id,'present','참석',cur) + attSeg(p.id,'late','지각',cur) + attSeg(p.id,'absent','불참',cur) + attSeg(p.id,'excused','미참석',cur)
       + '</div></div>';
   }).join('');
 
@@ -3874,11 +3925,13 @@ var MANUAL = [
   {id:'record', label:'기록', title:'📊 기록', body: function(){ return ''
     + mnRow_('🛡️','경기 결과·득점·도움 입력은 <b>임원만</b> 해요. 경기를 탭하면 입력 화면이 열려요.')
     + mnRow_('🗓️','상단 칩으로 <b>연도·월별</b> 기록을 볼 수 있어요.')
-    + mnRow_('🏆','득점 · 도움 · 출석 <b>TOP 3</b>는 자동으로 집계됩니다.'); }},
+    + mnRow_('🏆','득점 · 도움 · 출석 <b>TOP 3</b>는 자동으로 집계됩니다.')
+    + mnRow_('🔢','출석 순위는 <b>점수제</b>예요 — 출석 1점 · 지각 0.5점 · 불참 -1점(임원이 조정 가능) · 미참석 0점.'); }},
   {id:'att', label:'출석', title:'📍 출석', body: function(){ return ''
     + mnRow_('📱','경기장에 도착하면 <b>[GPS로 출석 체크인]</b>을 누르세요. 반경(기본 100m) 안이면 출석 완료!')
-    + mnRow_('⏰','지각 기준 시각까지 체크인하면 <b>출석</b>, 그 이후는 <b>지각</b>, 체크인하지 않으면 <b>불참</b>으로 기록돼요.')
-    + mnRow_('🛡️','임원은 출석·지각·불참을 직접 기록할 수 있고, 반경·지각 기준도 임원이 설정해요.'); }},
+    + mnRow_('⏰','지각 기준 시각 전에 체크인하면 <b>출석</b>, 이후는 <b>지각</b>으로 기록돼요.')
+    + mnRow_('🙅','<b>불참</b> = 온다고 했는데 안 온 사람 / <b>미참석</b> = 안 온다고 미리 밝힌 사람. 임원이 구분해 표시해요.')
+    + mnRow_('🛡️','임원은 출석·지각·불참·미참석을 직접 기록할 수 있고, 반경·지각 기준도 임원이 설정해요.'); }},
   {id:'poll', label:'투표', title:'🗳️ 투표', body: function(){ return ''
     + mnRow_('✋','<b>누구나</b> 투표를 만들 수 있어요 — 참석 조사, 회식 메뉴 등!')
     + mnRow_('🔒','마감·삭제는 <b>만든 사람과 임원만</b> 할 수 있어요.')
