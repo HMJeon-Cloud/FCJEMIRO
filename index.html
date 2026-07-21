@@ -2391,7 +2391,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.77</p>';
+  + '<p class="hint">동네 축구왕 · v0.78</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
@@ -3876,6 +3876,9 @@ function openMatchForm(id){
   var m = id ? state.matches.filter(function(x){return x.id===id;})[0] : null;
   var title = id ? '경기 정보 수정' : '경기 등록';
   venuePick = (m && m.lat!=null && m.lat!=='' && m.lng!=null && m.lng!=='') ? {lat:Number(m.lat), lng:Number(m.lng)} : null;
+  venuePickUrl = (m && m.venueUrl) ? m.venueUrl : '';
+  var oppOpts = matchOpponents_().map(function(o){ return '<option value="'+esc(o)+'">'; }).join('');
+  var venOpts = pastVenues_().map(function(pv){ return '<option value="'+esc(pv.venue)+'">'; }).join('');
   var html = '<div class="grabber"></div>'
    + '<div class="sheet-head"><h3>'+title+'</h3><button class="x" onclick="closeSheet()">✕</button></div>'
    + '<div class="sheet-body">'
@@ -3883,8 +3886,16 @@ function openMatchForm(id){
    +     '<div class="field"><label>날짜<span class="req">*</span></label><input id="g_date" type="date" value="'+(m?m.date:'')+'"></div>'
    +     '<div class="field"><label>시간</label><input id="g_time" type="time" value="'+(m&&cleanTime(m.time)?cleanTime(m.time):'15:00')+'"></div>'
    +   '</div>'
-   +   '<div class="field"><label>상대팀<span class="req">*</span></label><input id="g_opp" type="text" placeholder="FC 라이온즈" value="'+(m?esc(m.opponent):'')+'"></div>'
-   +   '<div class="field"><label>경기장</label><input id="g_venue" type="text" placeholder="예: 매화 축구장" value="'+(m&&m.venue?esc(m.venue):'')+'"></div>'
+   +   '<div class="field"><label>상대팀<span class="req">*</span></label>'
+   +     '<input id="g_opp" type="text" list="g_opp_list" autocomplete="off" placeholder="입력 또는 기존 상대팀 선택" value="'+(m?esc(m.opponent):'')+'">'
+   +     '<datalist id="g_opp_list">'+oppOpts+'</datalist>'
+   +     (oppOpts?'<p class="hint" style="margin:5px 2px 0;">기존 상대팀을 선택하면 기록에서 함께 집계돼요. (같은 팀은 같은 이름으로)</p>':'')
+   +   '</div>'
+   +   '<div class="field"><label>경기장</label>'
+   +     '<input id="g_venue" type="text" list="g_venue_list" autocomplete="off" placeholder="입력 또는 과거 경기장 선택" value="'+(m&&m.venue?esc(m.venue):'')+'" onchange="loadPastVenue_(this.value)">'
+   +     '<datalist id="g_venue_list">'+venOpts+'</datalist>'
+   +     (venOpts?'<p class="hint" style="margin:5px 2px 0;">과거 경기장을 선택하면 아래 지도 위치도 함께 불러와요.</p>':'')
+   +   '</div>'
    +   '<div class="field" style="margin-top:2px;"><label style="display:flex;align-items:center;gap:8px;cursor:pointer;"><input type="checkbox" id="g_useAtt" style="width:17px;height:17px;accent-color:var(--red);" '+((m? m.useAtt!==false : true)?'checked':'')+'> 이 경기 출석 체크 사용</label><p class="hint" style="margin:5px 2px 0;">사용 시 출석 탭에서 출석·지각·불참을 기록합니다. 미사용 시 이 경기는 출석 집계에서 제외돼요.</p></div>'
    +   '<div class="field"><label>지도에서 위치 지정</label>'
    +     '<div class="map-search"><input id="g_map_q" type="text" placeholder="장소·상호·주소 검색 (예: 매화 축구장)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();searchVenue();}"><button type="button" onclick="searchVenue()">검색</button></div>'
@@ -3903,7 +3914,7 @@ function openMatchForm(id){
 var KAKAO_JS_KEY = '2d591b6ef9c70f94f369b7c55c91baa3';
 /* 카카오 로그인 백엔드 base URL (OAuth 토큰 교환 서버 · 배포 후 입력, 예: https://xxx.vercel.app) */
 var KAKAO_BACKEND = 'https://kick-town.vercel.app';
-var venueMap=null, venueMarker=null, venuePick=null, leafletTried=false, kakaoTried=false;
+var venueMap=null, venueMarker=null, venuePick=null, venuePickUrl='', leafletTried=false, kakaoTried=false;
 var kakaoMap=null, kakaoMarker=null, mapProvider=null;
 
 function ensureKakao(cb){
@@ -4055,6 +4066,37 @@ function pickResultIdx(i){
   var h=(window._venueHits||{})[i]; if(!h) return;
   pickResult(h.lat, h.lng, h.name);
 }
+/* 기존 상대팀 목록 (중복 제거·정렬) — 같은 팀 이름 통일용 datalist */
+function matchOpponents_(){
+  var s={}; (state.matches||[]).forEach(function(m){ var o=(m.opponent||'').trim(); if(o) s[o]=1; });
+  return Object.keys(s).sort();
+}
+/* 과거 경기장 목록 (이름별, 좌표 있는 기록 우선) — 선택 시 지도 위치까지 불러오기 */
+function pastVenues_(){
+  var map={}; (state.matches||[]).forEach(function(m){
+    var v=(m.venue||'').trim(); if(!v) return;
+    var hasXY=(m.lat!=null&&m.lat!==''&&m.lng!=null&&m.lng!=='');
+    var cur=map[v];
+    var curHasXY = cur && cur.lat!=='' && cur.lat!=null;
+    if(!cur || (hasXY && !curHasXY)) map[v]={venue:v, lat:(hasXY?Number(m.lat):''), lng:(hasXY?Number(m.lng):''), venueUrl:m.venueUrl||''};
+  });
+  return Object.keys(map).sort().map(function(k){ return map[k]; });
+}
+/* 경기장 이름이 과거 경기장과 일치하면 지도 좌표·링크까지 불러오기 (새 이름이면 무시) */
+function loadPastVenue_(name){
+  name=(name||'').trim(); if(!name) return;
+  var list=pastVenues_(), pv=null;
+  for(var i=0;i<list.length;i++){ if(list[i].venue===name){ pv=list[i]; break; } }
+  if(!pv) return;
+  if(pv.lat!==''&&pv.lat!=null&&pv.lng!==''&&pv.lng!=null){
+    var lat=Number(pv.lat), lng=Number(pv.lng);
+    venuePick={lat:lat, lng:lng}; venuePickUrl=pv.venueUrl||'';
+    if(mapProvider==='kakao' && kakaoMap){ kakaoMap.setCenter(new kakao.maps.LatLng(lat,lng)); kakaoMap.setLevel(3); setKakaoMarker(lat,lng,false); }
+    else if(venueMap){ venueMap.setView([lat,lng],16); placeMarker(lat,lng); }
+    setVenueStatus();
+    toast('과거 경기장 위치를 불러왔어요');
+  } else if(pv.venueUrl){ venuePickUrl=pv.venueUrl; }
+}
 function pickResult(lat, lng, name){
   lat=Number(lat); lng=Number(lng);
   venuePick={lat:lat, lng:lng};
@@ -4072,7 +4114,7 @@ function saveMatch(id){
   var prev = id ? (state.matches.filter(function(x){return x.id===id;})[0]||{}) : {};
   var lat = venuePick ? venuePick.lat : (prev.lat!=null?prev.lat:'');
   var lng = venuePick ? venuePick.lng : (prev.lng!=null?prev.lng:'');
-  var url = venuePick ? ('https://www.google.com/maps?q='+venuePick.lat+','+venuePick.lng) : (prev.venueUrl||'');
+  var url = venuePick ? ('https://www.google.com/maps?q='+venuePick.lat+','+venuePick.lng) : (venuePickUrl || prev.venueUrl || '');
   var data = {
     date: date,
     time: document.getElementById('g_time').value,
