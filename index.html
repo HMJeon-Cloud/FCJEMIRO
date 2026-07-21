@@ -18,12 +18,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&display=swap" rel="stylesheet" />
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<!-- 지도(Leaflet)는 필요할 때만 지연 로드(ensureLeaflet) — 초기 로딩 차단 제거 -->
+<!-- Firebase는 body 끝(스플래시 렌더 후)에서 로드해 첫 화면 표시를 빠르게 -->
 <!-- 카카오 로그인은 백엔드 OAuth로 처리 (JS SDK 불필요). 카카오맵 SDK는 별도 로드됨 -->
-<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 <style>
   :root{
     --ink:#111015;
@@ -665,6 +662,10 @@
 
 </div>
 
+<!-- Firebase: 스플래시/셸이 먼저 그려진 뒤 로드 (head 차단 제거 → 첫 화면 표시 가속) -->
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 <script>
 /* ================= State ================= */
 var state = {
@@ -794,6 +795,8 @@ var FIREBASE_CONFIG = {
 
 var APP_NAME = '동네 축구왕';
 var APP_SUB = 'KICKTOWN';
+/* 현재 앱 버전 (version.json과 비교해 최신 아니면 자동 업데이트) */
+var APP_VERSION = '0.79';
 /* 동축_아이콘: 로그인/팀탭 대표 이미지 (256x256 남색 PNG, 여백 없음) */
 var APP_LOGO = 'logo.png';
 /* 동축_배경: 헤더 배경 이미지 (1000x545 JPEG). 비우면 다크 그라디언트로 fallback */
@@ -2391,7 +2394,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.78</p>';
+  + '<p class="hint">동네 축구왕 · v'+APP_VERSION+'</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
@@ -5265,6 +5268,27 @@ FS.init();
 if('serviceWorker' in navigator){
   try{ navigator.serviceWorker.register('sw.js').catch(function(){}); }catch(e){}
 }
+/* ── 최신 버전 확인 & 자동 업데이트 ──
+   접속(링크/앱 실행) 시 version.json을 캐시 없이 확인해, 현재 버전보다 새 버전이면
+   캐시를 비우고 1회 자동 새로고침(루프 방지). 최신이면 아무 것도 안 함. */
+function verNum_(v){ var p=String(v||'').split('.'); return (parseInt(p[0],10)||0)*100000+(parseInt(p[1],10)||0)*100+(parseInt(p[2],10)||0); }
+function checkForUpdate_(){
+  try{
+    fetch('version.json?_='+Date.now(), {cache:'no-store'})
+      .then(function(r){ return r && r.ok ? r.json() : null; })
+      .then(function(j){
+        if(!j || !j.version) return;
+        if(verNum_(j.version) > verNum_(APP_VERSION)){
+          try{ if(sessionStorage.getItem('kt_upd')===String(j.version)) return; sessionStorage.setItem('kt_upd', String(j.version)); }catch(e){}
+          var go=function(){ try{ location.reload(); }catch(e){} };
+          try{ if(navigator.serviceWorker && navigator.serviceWorker.controller) navigator.serviceWorker.controller.postMessage('CLEAR_CACHE'); }catch(e){}
+          if(window.caches){ caches.keys().then(function(ks){ return Promise.all(ks.map(function(k){ return caches.delete(k); })); }).then(go, go); }
+          else go();
+        }
+      }).catch(function(){});
+  }catch(e){}
+}
+try{ checkForUpdate_(); }catch(e){}
 function hideSplash_(){ var s=document.getElementById('splash'); if(s){ s.style.opacity='0'; setTimeout(function(){ s.style.display='none'; }, 240); } }
 setTimeout(hideSplash_, 9000);   // 안전장치: 무슨 일이 있어도 스플래시는 사라짐
 /* 모바일 당겨서 새로고침 (기본 브라우저 PTR은 고정 레이아웃 때문에 동작 안 함 → 직접 구현) */
