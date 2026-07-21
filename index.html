@@ -872,7 +872,7 @@ function mockHandler(fn, a){
   if(fn==='addClub'){
     var cd=a[0];
     var cid='c'+Date.now();
-    var club={id:cid, name:cd.name, region:cd.region||'', note:cd.note||'', emblem:cd.emblem||'', own:false, ownerId:cd.ownerId||null, createdAt:new Date().toISOString()};
+    var club={id:cid, name:cd.name, region:cd.region||'', note:cd.note||'', emblem:cd.emblem||'', bg:cd.bg||'', own:false, ownerId:cd.ownerId||null, createdAt:new Date().toISOString()};
     DB.clubs.push(club);
     var membership=null;
     if(cd.owner && cd.owner.name){
@@ -917,7 +917,7 @@ function mockHandler(fn, a){
   if(fn==='myPendingJoins'){ // a: accId → 신청 대기중인 clubId 목록
     return DB.joins.filter(function(j){return j.accountId===a[0] && j.status==='pending';}).map(function(j){return j.clubId;});
   }
-  if(fn==='updateClub'){ DB.clubs.forEach(function(c){ if(c.id===a[0].id) Object.assign(c, {name:a[0].name, region:a[0].region, note:a[0].note, emblem:a[0].emblem}); }); return mockHandler('getClubs',[]); }
+  if(fn==='updateClub'){ DB.clubs.forEach(function(c){ if(c.id===a[0].id) Object.assign(c, {name:a[0].name, region:a[0].region, note:a[0].note, emblem:a[0].emblem, bg:(a[0].bg!=null?a[0].bg:c.bg)}); }); return mockHandler('getClubs',[]); }
   if(fn==='toggleClubFav'){ DB.clubs.forEach(function(c){ if(c.id===a[0]) c.fav=!c.fav; }); return mockHandler('getClubs',[]); }
   if(fn==='deleteClub'){ DB.clubs=DB.clubs.filter(function(c){return c.id!==a[0];}); if(DB.clubs.length && !DB.clubs.some(function(c){return c.own;})) DB.clubs[0].own=true; return mockHandler('getClubs',[]); }
   // --- 추가 참석 신청 (extras) ---
@@ -961,9 +961,9 @@ function mockHandler(fn, a){
     var mf=DB.players.filter(function(x){return x.id===a[0];})[0];
     var mt=DB.players.filter(function(x){return x.id===a[1];})[0];
     if(!mf || !mt) return {ok:false, error:'팀원을 찾을 수 없습니다'};
-    if(mt.accountId || mt.ownerId) return {ok:false, error:'대상 팀원에 이미 계정이 연결되어 있어요'};
-    if(mf.accountId) mt.accountId=mf.accountId;
-    if(mf.ownerId) mt.ownerId=mf.ownerId;
+    if((mf.accountId||mf.ownerId) && (mt.accountId||mt.ownerId)) return {ok:false, error:'양쪽 모두 계정이 연결돼 있어 통합할 수 없어요'};
+    if(!mt.accountId && mf.accountId) mt.accountId=mf.accountId;   // 남길(to) 팀원에 계정 없으면 이전
+    if(!mt.ownerId && mf.ownerId) mt.ownerId=mf.ownerId;
     // 경기 기준 기록 이전(대상에 같은 경기 기록이 없을 때만) 후 B의 잔여 기록 제거
     ['stats','attendance','matchRoster'].forEach(function(coll){
       (DB[coll]||[]).forEach(function(x){ if(x.playerId===a[0]){ if(!DB[coll].some(function(y){return y.playerId===a[1] && y.matchId===x.matchId;})) x.playerId=a[1]; } });
@@ -2391,7 +2391,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.75</p>';
+  + '<p class="hint">동네 축구왕 · v0.76</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
@@ -3383,13 +3383,20 @@ function setHeader_(emblem, name, sub){
   var nameEl=document.querySelector('.club .name'); if(nameEl) nameEl.innerHTML=name;
   var tagEl=document.querySelector('.club .tag'); if(tagEl) tagEl.textContent=sub;
 }
-function applyAppHeader(){ setHeader_(APP_LOGO, esc(APP_NAME), APP_SUB); }
+/* 헤더 배경(엠블럼 뒤): 팀 전용 이미지 있으면 사용, 없으면 기본(APP_BG) */
+function setHeaderBg_(url){
+  var v = url ? ('url("'+url+'")') : (APP_BG ? ('url("'+APP_BG+'")') : '');
+  if(v) document.documentElement.style.setProperty('--hero-img', v);
+  else document.documentElement.style.removeProperty('--hero-img');
+}
+function applyAppHeader(){ setHeader_(APP_LOGO, esc(APP_NAME), APP_SUB); setHeaderBg_(''); }
 function activeClub(){ return (state.clubs||[]).filter(function(c){return c.id===state.activeClubId;})[0] || null; }
 /* 화면 표기용 우리 팀 이름 (팀 미선택 시 앱명) */
 function ourTeamName_(){ var c=activeClub(); return (c&&c.name) ? c.name : APP_NAME; }
 function applyClubHeader(){
   var c = activeClub(); if(!c){ applyAppHeader(); return; }
   setHeader_(c.emblem||APP_LOGO, esc(c.name)+(c.region?' <span class="rg">'+esc(c.region)+'</span>':''), c.note||'');
+  setHeaderBg_(c.bg||'');   // 팀 전용 헤더 배경 (없으면 기본)
 }
 /* 화면에 맞는 헤더 자동 적용: 팀 탭 = 앱, 나머지 = 활성 팀 */
 function applyHeaderFor(screen){
@@ -3480,6 +3487,7 @@ function toggleClubFav(id){
   API.run('toggleClubFav', id).then(function(list){ if(list){ state.clubs=list; if(state.screen==='club') render(); } }).catch(function(){ toast('저장 실패 · 새로고침'); });
 }
 var clubEmblemData = '';
+var clubBgData = '';
 function openClubForm(clubId){
   if(!state.auth){ toast('로그인이 필요합니다'); return; }
   if(isGuest()){ toast('게스트는 팀을 만들 수 없어요. 구단주로 로그인해 주세요.'); return; }
@@ -3487,6 +3495,7 @@ function openClubForm(clubId){
   if(clubId && !isAdmin()){ toast('임원만 팀 정보를 수정할 수 있습니다'); return; }
   state.editClubId = clubId || null;
   clubEmblemData = c && c.emblem ? c.emblem : '';
+  clubBgData = c && c.bg ? c.bg : '';
   var regList = REGIONS.slice();
   if(c && c.region && regList.indexOf(c.region)<0) regList.unshift(c.region);
   var regOpts = '<option value="">지역 선택</option>' + regList.map(function(r){ return '<option value="'+esc(r)+'"'+(c&&c.region===r?' selected':'')+'>'+esc(r)+'</option>'; }).join('');
@@ -3498,6 +3507,14 @@ function openClubForm(clubId){
    +     '<div style="display:flex;align-items:center;gap:12px;">'
    +       '<div id="cb_prev" class="club-emblem'+(clubEmblemData?'':' club-emblem-empty')+'" style="width:56px;height:56px;">'+prev+'</div>'
    +       '<label class="btn-ghost" style="flex:1;margin:0;text-align:center;cursor:pointer;">이미지 선택<input id="cb_file" type="file" accept="image/*" style="display:none;" onchange="pickEmblem(this)"></label>'
+   +     '</div></div>'
+   +   '<div class="field"><label>헤더 배경 <span style="color:var(--steel-soft);font-weight:600;">(엠블럼 뒤 배경 · 선택)</span></label>'
+   +     '<div id="cb_bgprev" style="width:100%;height:76px;border-radius:12px;border:1px solid var(--line-strong);background:#15131b '+(clubBgData?('center/cover no-repeat url('+clubBgData+')'):'')+';overflow:hidden;position:relative;">'
+   +       '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,9,14,.35),rgba(10,9,14,.6));"></div>'
+   +       '<span id="cb_bghint" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:'+(clubBgData?'#fff':'var(--steel-soft)')+';font-size:12px;font-weight:600;z-index:1;">'+(clubBgData?'적용된 배경':'기본 배경 사용 중')+'</span></div>'
+   +     '<div style="display:flex;gap:8px;margin-top:8px;">'
+   +       '<label class="btn-ghost" style="flex:1;margin:0;text-align:center;cursor:pointer;">배경 이미지 선택<input id="cb_bgfile" type="file" accept="image/*" style="display:none;" onchange="pickClubBg(this)"></label>'
+   +       '<button class="btn-ghost" type="button" style="flex:0 0 auto;" onclick="clearClubBg()">기본으로</button>'
    +     '</div></div>'
    +   '<div class="field"><label>팀명<span class="req">*</span></label><input id="cb_name" type="text" value="'+(c?esc(c.name):'')+'"></div>'
    +   '<div class="field"><label>지역</label><select id="cb_region">'+regOpts+'</select></div>'
@@ -3524,10 +3541,35 @@ function pickEmblem(input){
   };
   reader.readAsDataURL(file);
 }
+/* 팀 헤더 배경 이미지: 헤더 폭에 맞게 축소(가로 최대 720) 후 JPEG로 저장 */
+function pickClubBg(input){
+  var file = input.files && input.files[0]; if(!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    var img = new Image();
+    img.onload = function(){
+      var maxW=720, maxH=420;
+      var r=Math.min(maxW/img.width, maxH/img.height, 1);
+      var w=Math.round(img.width*r), h=Math.round(img.height*r);
+      var c=document.createElement('canvas'); c.width=w; c.height=h;
+      c.getContext('2d').drawImage(img,0,0,w,h);
+      clubBgData = c.toDataURL('image/jpeg', 0.78);
+      var pv=document.getElementById('cb_bgprev'); if(pv){ pv.style.background='#15131b center/cover no-repeat url('+clubBgData+')'; }
+      var hint=document.getElementById('cb_bghint'); if(hint){ hint.textContent='적용된 배경'; hint.style.color='#fff'; }
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function clearClubBg(){
+  clubBgData = '';
+  var pv=document.getElementById('cb_bgprev'); if(pv){ pv.style.background='#15131b'; }
+  var hint=document.getElementById('cb_bghint'); if(hint){ hint.textContent='기본 배경 사용 중'; hint.style.color='var(--steel-soft)'; }
+}
 function saveClub(){
   var name=(document.getElementById('cb_name')||{}).value||'';
   if(!name.trim()){ toast('팀명을 입력하세요'); return; }
-  var data={ name:name.trim(), region:(document.getElementById('cb_region')||{}).value||'', note:((document.getElementById('cb_note')||{}).value||'').trim(), emblem:clubEmblemData||'' };
+  var data={ name:name.trim(), region:(document.getElementById('cb_region')||{}).value||'', note:((document.getElementById('cb_note')||{}).value||'').trim(), emblem:clubEmblemData||'', bg:clubBgData||'' };
   if(state.editClubId){
     // 수정
     var id=state.editClubId;
@@ -3768,16 +3810,33 @@ function openMergePlayer_(fromId){
    +   list
    + '</div>');
 }
-function confirmMergePlayer_(fromId, toId){
-  var from=(state.players||[]).filter(function(x){return x.id===fromId;})[0];
-  var to=(state.players||[]).filter(function(x){return x.id===toId;})[0];
-  if(!from||!to) return;
-  appConfirm_('‘'+from.name+'’의 계정을 ‘'+to.name+'’에 연결하고\n‘'+from.name+'’ 항목을 삭제할까요?\n\n· ‘'+from.name+'’의 기록은 ‘'+to.name+'’(으)로 옮겨집니다.\n· 되돌릴 수 없어요.', function(){
+function pById_(pid){ return (state.players||[]).filter(function(x){return x.id===pid;})[0]; }
+function pDetail_(p){ return (p.num!=null&&p.num!==''&&p.num!=='미정'?('#'+p.num+' · '):'')+((p.positions&&p.positions.length)?p.positions.join('/'):'포지션 미정'); }
+/* 통합 시 남길 팀원 정보 선택 (계정은 계정연결(acct)쪽 것으로, 기록은 합쳐짐) */
+function confirmMergePlayer_(acctPid, profilePid){
+  if(!requireAdmin()) return;
+  var acctP=pById_(acctPid), profileP=pById_(profilePid); if(!acctP||!profileP) return;
+  showSheet('<div class="grabber"></div>'
+   + '<div class="sheet-head"><h3>남길 팀원 정보 선택</h3><button class="x" onclick="closeSheet()">✕</button></div>'
+   + '<div class="sheet-body">'
+   +   '<p style="font-size:13px;color:var(--steel);margin:0 0 12px;line-height:1.6;">두 항목을 하나로 합쳐요. <b>계정(로그인)</b>은 «'+esc(acctP.name)+'» 것이 연결되고 <b>양쪽 기록</b>은 합쳐집니다.<br>남길 <b>팀원 정보(이름·등번호·포지션 등)</b>를 고르세요.</p>'
+   +   '<div class="player" style="margin-bottom:8px;cursor:pointer;" onclick="doMergeConfirm_(\''+acctPid+'\',\''+profilePid+'\')">'
+   +     '<div class="meta"><div class="pname">'+esc(profileP.name)+' <span style="font-size:11px;color:var(--gold,#C7A24B);font-weight:800;">추천</span></div><div class="sub">'+pDetail_(profileP)+' · 기존 팀원 정보 유지</div></div>'
+   +     '<div style="color:var(--red);font-size:12px;font-weight:700;">이 정보 ›</div></div>'
+   +   '<div class="player" style="cursor:pointer;" onclick="doMergeConfirm_(\''+profilePid+'\',\''+acctPid+'\')">'
+   +     '<div class="meta"><div class="pname">'+esc(acctP.name)+'</div><div class="sub">'+pDetail_(acctP)+' · 새로 가입한 정보 유지</div></div>'
+   +     '<div style="color:var(--red);font-size:12px;font-weight:700;">이 정보 ›</div></div>'
+   + '</div>');
+}
+function doMergeConfirm_(fromId, toId){
+  if(!requireAdmin()) return;
+  var from=pById_(fromId), to=pById_(toId); if(!from||!to) return;
+  appConfirm_('«'+to.name+'» 정보로 통합하고 «'+from.name+'» 항목을 삭제할까요?\n\n· 계정과 양쪽 기록은 «'+to.name+'»에 연결·이전됩니다.\n· 되돌릴 수 없어요.', function(){
     API.run('mergePlayer', fromId, toId).then(function(r){
       if(r && r.ok){
         if(r.players) state.players=r.players;
-        if(r.memberships && state.auth && (from.accountId===state.auth.ownerId)){ state.auth.memberships=r.memberships; saveSession(state.auth); }
-        closeSheet(); toast('‘'+to.name+'’(으)로 계정을 연결했어요');
+        if(r.memberships && state.auth && state.auth.ownerId && (from.accountId===state.auth.ownerId || to.accountId===state.auth.ownerId)){ state.auth.memberships=r.memberships; saveSession(state.auth); }
+        closeSheet(); toast('«'+to.name+'»(으)로 통합했어요');
         render();
       } else { toast((r&&r.error)||'통합에 실패했어요'); }
     }).catch(function(){ toast('통합 저장 실패 · 새로고침'); });
