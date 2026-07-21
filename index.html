@@ -796,7 +796,7 @@ var FIREBASE_CONFIG = {
 var APP_NAME = '동네 축구왕';
 var APP_SUB = 'KICKTOWN';
 /* 현재 앱 버전 (version.json과 비교해 최신 아니면 자동 업데이트) */
-var APP_VERSION = '0.80';
+var APP_VERSION = '0.81';
 /* 동축_아이콘: 로그인/팀탭 대표 이미지 (256x256 남색 PNG, 여백 없음) */
 var APP_LOGO = 'logo.png';
 /* 동축_배경: 헤더 배경 이미지 (1000x545 JPEG). 비우면 다크 그라디언트로 fallback */
@@ -2258,8 +2258,8 @@ function attMarkingSection(m){
     return '<div class="att-row"><span class="att-num oswald">'+numDisp(p.num)+'</span>'+nameCell+tag+'</div>';
   }).join('');
   var head = full
-    ? '<div class="eyebrow">출석 체크 · 참석 명단 '+players.length+'명</div><p style="font-size:11.5px;color:var(--steel-soft);margin:0 0 6px;">참석 명단 인원의 출석·지각·불참·미참석을 기록합니다.<br><b>불참</b>=온다 하고 안 옴 · <b>미참석</b>=안 온다고 밝힘</p>'
-    : '<div class="eyebrow">출석 체크</div><p style="font-size:11.5px;color:var(--steel-soft);margin:0 0 6px;">전체 팀원의 출석·지각·불참·미참석을 기록합니다.<br><b>불참</b>=온다 하고 안 옴 · <b>미참석</b>=안 온다고 밝힘 (투표의 “참석자 적용”으로 명단을 좁힐 수 있어요)</p>';
+    ? '<div class="eyebrow">출석 체크 · 참석 명단 '+players.length+'명</div><p style="font-size:11.5px;color:var(--steel-soft);margin:0 0 6px;">참석 명단 인원의 출석·지각·불참·미참석을 기록합니다.<br><b>불참</b>=참석한다 하고 안 옴(무단) · <b>미참석</b>=미리 못 온다고 알림</p>'
+    : '<div class="eyebrow">출석 체크</div><p style="font-size:11.5px;color:var(--steel-soft);margin:0 0 6px;">전체 팀원의 출석·지각·불참·미참석을 기록합니다.<br><b>불참</b>=참석한다 하고 안 옴(무단) · <b>미참석</b>=미리 못 온다고 알림 (투표의 “참석자 적용”으로 명단을 좁힐 수 있어요)</p>';
   return '<div class="section">'+head+'<div class="att-list">'+rows+'</div></div>';
 }
 function markAtt(pid, status){
@@ -4400,7 +4400,7 @@ var MANUAL = [
   {id:'att', label:'출석', title:'📍 출석', body: function(){ return ''
     + mnRow_('📱','경기장에 도착하면 <b>[GPS로 출석 체크인]</b>을 누르세요. 반경(기본 100m) 안이면 출석 완료! 체크인한 날짜·시각도 함께 표시돼요.')
     + mnRow_('⏰','지각 기준 시각 전에 체크인하면 <b>출석</b>, 이후는 <b>지각</b>으로 기록돼요.')
-    + mnRow_('🙅','<b>불참</b> = 온다고 했는데 안 온 사람 / <b>미참석</b> = 안 온다고 미리 밝힌 사람. 임원이 구분해 표시해요.')
+    + mnRow_('🙅','<b>불참</b> — 참석한다고 해놓고 오지 않은 경우(무단 불참) / <b>미참석</b> — 처음부터 못 온다고 미리 알린 경우. 임원이 구분해 표시해요.')
     + mnRow_('🛡️','임원은 출석·지각·불참·미참석을 직접 기록할 수 있고, 반경·지각 기준도 임원이 설정해요.'); }},
   {id:'poll', label:'투표', title:'🗳️ 투표', body: function(){ return ''
     + mnRow_('✋','<b>누구나</b> 투표를 만들 수 있어요 — 참석 조사, 회식 메뉴 등!')
@@ -4416,8 +4416,56 @@ var MANUAL = [
     + mnRow_('🎨','팀 정보 수정에서 <b>엠블럼</b>과 <b>헤더 배경 이미지</b>를 팀 전용으로 등록할 수 있어요. (없으면 기본 이미지)')
     + mnRow_('📥','구단주는 <b>엑셀 양식</b>으로 팀원·경기 기록을 한 번에 등록해요. 경기 기록은 <b>선수 출석·선수 기록·경기 기록 3탭</b> 양식이고, 기존 경기가 있으면 <b>일자·시간·상대팀</b>으로 찾아 수정, 없으면 추가돼요.')
     + mnRow_('🔄','접속하면 항상 <b>최신 버전으로 자동 업데이트</b>돼요. 화면 맨 위에서 <b>당겨서 새로고침</b>도 가능!')
-    + mnRow_('📲','휴대폰 홈 화면에 추가하면 <b>앱처럼</b> 쓸 수 있어요. (안드로이드: 앱 설치 / 아이폰: 공유 → 홈 화면에 추가)'); }}
+    + mnRow_('📲','휴대폰 홈 화면에 추가하면 <b>앱처럼</b> 쓸 수 있어요. 안드로이드는 "앱 설치" 안내가 떠요.<br><button class="btn-ghost" style="margin-top:8px;padding:9px 12px;width:100%;" onclick="openAddHomeGuide_()">📱 아이폰 홈 화면 추가 방법 보기</button>'); }}
 ];
+/* 아이폰(사파리) 홈 화면 추가 안내 — 3단계 일러스트 */
+function ahStep_(n, title, desc, svg){
+  return '<div style="display:flex;gap:12px;align-items:flex-start;margin-bottom:16px;">'
+    + '<div style="flex:0 0 auto;width:26px;height:26px;border-radius:50%;background:var(--red);color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center;font-size:14px;margin-top:2px;">'+n+'</div>'
+    + '<div style="flex:1;min-width:0;">'
+    +   '<div style="font-weight:700;font-size:14.5px;margin-bottom:2px;">'+title+'</div>'
+    +   '<p style="font-size:12.5px;color:var(--steel);line-height:1.5;margin:0 0 8px;">'+desc+'</p>'
+    +   '<div style="background:#f4f3f6;border:1px solid var(--line-strong);border-radius:12px;padding:10px;display:flex;align-items:center;justify-content:center;">'+svg+'</div>'
+    + '</div></div>';
+}
+function openAddHomeGuide_(){
+  var shareGlyph = '<g stroke="#C8102E" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M130 17v14"/><path d="M125 22l5-5 5 5"/><path d="M121 27v10h18V27"/></g>';
+  // 1) 사파리 하단(또는 상단) 공유 버튼
+  var svg1 = '<svg viewBox="0 0 260 58" style="width:100%;max-width:260px;">'
+    + '<rect x="1" y="1" width="258" height="56" rx="15" fill="#fff" stroke="#e5e4ea"/>'
+    + '<g stroke="#c0c0c8" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round"><path d="M42 22l-8 7 8 7"/><path d="M80 22l8 7-8 7"/></g>'
+    + '<circle cx="130" cy="29" r="20" fill="#FDECEE" stroke="#C8102E" stroke-width="2.5"/>' + shareGlyph
+    + '<g stroke="#c0c0c8" stroke-width="2.2" fill="none"><path d="M176 22h14M176 29h14M176 36h10"/><rect x="212" y="22" width="13" height="15" rx="2"/><rect x="220" y="27" width="13" height="15" rx="2" fill="#fff"/></g>'
+    + '<text x="130" y="55" text-anchor="middle" font-size="9" fill="#C8102E" font-weight="700">공유</text>'
+    + '</svg>';
+  // 2) 공유 메뉴에서 '홈 화면에 추가'
+  var svg2 = '<svg viewBox="0 0 260 130" style="width:100%;max-width:260px;">'
+    + '<rect x="1" y="1" width="258" height="128" rx="16" fill="#fff" stroke="#e5e4ea"/>'
+    + '<rect x="16" y="16" width="80" height="42" rx="10" fill="#f4f3f6"/><text x="26" y="41" font-size="11" fill="#9aa">복사</text>'
+    + '<rect x="104" y="16" width="80" height="42" rx="10" fill="#f4f3f6"/><text x="114" y="41" font-size="11" fill="#9aa">즐겨찾기</text>'
+    + '<rect x="14" y="74" width="232" height="42" rx="11" fill="#FDECEE" stroke="#C8102E" stroke-width="2"/>'
+    + '<g stroke="#111015" stroke-width="1.9" fill="none"><rect x="28" y="86" width="18" height="18" rx="4"/><path d="M37 90v10M32 95h10"/></g>'
+    + '<text x="58" y="100" font-size="13" fill="#111015" font-weight="700">홈 화면에 추가</text>'
+    + '</svg>';
+  // 3) '추가' 버튼
+  var svg3 = '<svg viewBox="0 0 260 92" style="width:100%;max-width:260px;">'
+    + '<rect x="1" y="1" width="258" height="90" rx="16" fill="#fff" stroke="#e5e4ea"/>'
+    + '<text x="20" y="30" font-size="13" fill="#111015" font-weight="700">홈 화면에 추가</text>'
+    + '<rect x="196" y="14" width="50" height="26" rx="8" fill="#FDECEE" stroke="#C8102E" stroke-width="2"/><text x="221" y="31" text-anchor="middle" font-size="12" fill="#C8102E" font-weight="800">추가</text>'
+    + '<rect x="20" y="52" width="30" height="30" rx="8" fill="#1B1440"/><text x="35" y="72" text-anchor="middle" font-size="11" fill="#E7C878" font-weight="700">동축</text>'
+    + '<text x="60" y="64" font-size="12.5" fill="#111015" font-weight="600">동네 축구왕</text>'
+    + '<text x="60" y="78" font-size="10" fill="#9aa">hmjeon-cloud.github.io</text>'
+    + '</svg>';
+  showSheet('<div class="grabber"></div>'
+   + '<div class="sheet-head"><h3>📱 아이폰 홈 화면에 추가</h3><button class="x" onclick="openManual(\'more\')">✕</button></div>'
+   + '<div class="sheet-body">'
+   +   '<p style="font-size:12.5px;color:var(--steel-soft);margin:0 0 14px;line-height:1.55;"><b>사파리(Safari)</b>에서 이 페이지를 연 상태로 진행하세요. (크롬 등 다른 브라우저에서는 “공유 → 홈 화면에 추가”가 없을 수 있어요.)</p>'
+   +   ahStep_(1,'하단의 <b>공유 버튼</b>을 탭','화면 아래(기종에 따라 위)의 네모+위 화살표 아이콘이에요.', svg1)
+   +   ahStep_(2,'<b>“홈 화면에 추가”</b>를 선택','메뉴를 아래로 조금 내리면 있어요.', svg2)
+   +   ahStep_(3,'오른쪽 위 <b>“추가”</b>를 탭','홈 화면에 동축 아이콘이 생겨요. 이제 앱처럼 열 수 있어요!', svg3)
+   +   '<p style="font-size:11.5px;color:var(--steel-soft);margin:4px 2px 0;">안드로이드(크롬/삼성인터넷)는 접속 시 “앱 설치/홈 화면에 추가” 안내가 자동으로 떠요.</p>'
+   + '</div>');
+}
 function manualTopicForScreen_(){
   var s = state.screen;
   if(s==='venue') return 'squad';
