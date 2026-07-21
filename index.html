@@ -383,6 +383,9 @@
   .lb-val{font-weight:600;font-size:15px;color:var(--red);}
   .lb-val small{font-family:'Pretendard';color:var(--steel);font-size:11px;margin-left:2px;}
   .lb-empty{padding:12px 13px;font-size:12.5px;color:var(--steel-soft);}
+  .lb-mine{display:flex;align-items:center;gap:10px;padding:9px 13px;background:rgba(199,162,75,.10);border-top:1px dashed rgba(199,162,75,.45);}
+  .lb-mine-k{font-size:12px;font-weight:800;color:var(--gold,#C7A24B);flex:0 0 auto;}
+  .lb-mine-r{flex:1;font-size:12px;color:var(--steel);font-weight:600;}
 
   /* Result form attendance segments */
   .res-row{padding:9px 2px;border-bottom:1px solid var(--line);}
@@ -954,6 +957,27 @@ function mockHandler(fn, a){
   if(fn==='addPlayer'){ a[0].id='m'+Date.now(); a[0].clubId=AC; if(!a[0].role) a[0].role='팀원'; DB.players.push(a[0]); return mockHandler('getPlayers',[]); }
   if(fn==='updatePlayer'){ DB.players.forEach(function(x){ if(x.id===a[0].id) Object.assign(x,a[0]); }); return mockHandler('getPlayers',[]); }
   if(fn==='deletePlayer'){ DB.players=DB.players.filter(function(x){return x.id!==a[0];}); DB.members=DB.members.filter(function(x){return x.playerId!==a[0];}); return mockHandler('getPlayers',[]); }
+  if(fn==='mergePlayer'){  // a: fromPid(삭제될 계정연결 B), toPid(유지할 기존 A) → A로 계정·기록 이전 후 B 삭제
+    var mf=DB.players.filter(function(x){return x.id===a[0];})[0];
+    var mt=DB.players.filter(function(x){return x.id===a[1];})[0];
+    if(!mf || !mt) return {ok:false, error:'팀원을 찾을 수 없습니다'};
+    if(mt.accountId || mt.ownerId) return {ok:false, error:'대상 팀원에 이미 계정이 연결되어 있어요'};
+    if(mf.accountId) mt.accountId=mf.accountId;
+    if(mf.ownerId) mt.ownerId=mf.ownerId;
+    // 경기 기준 기록 이전(대상에 같은 경기 기록이 없을 때만) 후 B의 잔여 기록 제거
+    ['stats','attendance','matchRoster'].forEach(function(coll){
+      (DB[coll]||[]).forEach(function(x){ if(x.playerId===a[0]){ if(!DB[coll].some(function(y){return y.playerId===a[1] && y.matchId===x.matchId;})) x.playerId=a[1]; } });
+      DB[coll]=(DB[coll]||[]).filter(function(x){ return x.playerId!==a[0]; });
+    });
+    // 스쿼드 편성(squadId 기준)
+    (DB.members||[]).forEach(function(x){ if(x.playerId===a[0]){ if(!DB.members.some(function(y){return y.playerId===a[1] && y.squadId===x.squadId;})) x.playerId=a[1]; } });
+    DB.members=(DB.members||[]).filter(function(x){ return x.playerId!==a[0]; });
+    // 투표(pollId 기준)
+    (DB.votes||[]).forEach(function(x){ if(x.playerId===a[0]){ if(!DB.votes.some(function(y){return y.playerId===a[1] && y.pollId===x.pollId;})) x.playerId=a[1]; } });
+    DB.votes=(DB.votes||[]).filter(function(x){ return x.playerId!==a[0]; });
+    DB.players=DB.players.filter(function(x){return x.id!==a[0];});
+    return {ok:true, players:mockHandler('getPlayers',[]), memberships:(mt.accountId?accountMemberships_(mt.accountId):[])};
+  }
   // --- matches ---
   if(fn==='getMatches') return DB.matches.filter(inClub).slice().sort(function(x,y){return (y.date+y.time).localeCompare(x.date+x.time);});
   if(fn==='addMatch'){ a[0].id='g'+Date.now(); a[0].clubId=AC; DB.matches.push(a[0]); return mockHandler('getMatches',[]); }
@@ -1981,25 +2005,43 @@ function viewRecord(){
       .sort(function(x,y){ return y.v-x.v; })
       .slice(0,3);
   }
+  // 로그인한 본인(현재 팀 소속)의 개인 기록 + 순위
+  var myPid = authId();
+  function myStat(key){
+    if(!myPid || !agg[myPid]) return null;
+    var v = Math.round(agg[myPid][key]*10)/10;
+    var ranked = Object.keys(agg).map(function(pid){ return {pid:pid, v:Math.round(agg[pid][key]*10)/10}; })
+      .filter(function(r){ return r.v>0; }).sort(function(a,b){ return b.v-a.v; });
+    var rank=0; for(var i=0;i<ranked.length;i++){ if(ranked[i].pid===myPid){ rank=i+1; break; } }
+    return {v:v, rank:rank};
+  }
   var boardsHtml = '<div class="boards">'
-    + leaderBoard('득점', top3('g'), '골')
-    + leaderBoard('도움', top3('a'), '도움')
-    + leaderBoard('출석', top3('att'), '점')
+    + leaderBoard('득점', top3('g'), '골', myStat('g'))
+    + leaderBoard('도움', top3('a'), '도움', myStat('a'))
+    + leaderBoard('출석', top3('att'), '점', myStat('att'))
     + '</div>';
 
+  var recSec = '<div class="section"><div class="eyebrow">선수 기록 · TOP 3</div>'+boardsHtml+'</div>';
+  var matchSec = '<div class="section"><div class="eyebrow">경기 기록</div>'+mlist+'</div>';
   return seg + chips + summary
-    + '<div class="section"><div class="eyebrow">경기 기록</div>'+mlist+'</div>'
-    + '<div class="section"><div class="eyebrow">선수 기록 · TOP 3</div>'+boardsHtml+'</div>'
+    + recSec + matchSec   // 선수 기록(위) → 경기 기록(아래)
     + '<p class="hint">경기를 탭하면 스코어와 선수별 득점·도움·출석을 입력할 수 있습니다.</p>';
 }
 var MEDAL = ['①','②','③'];
-function leaderBoard(title, rows, unit){
+function leaderBoard(title, rows, unit, mine){
   var body = rows.length ? rows.map(function(r,i){
     return '<div class="lb-row"><span class="lb-rank r'+(i+1)+'">'+MEDAL[i]+'</span>'
       + '<span class="lb-name">'+r.name+'</span>'
       + '<span class="lb-val oswald">'+r.v+'<small>'+unit+'</small></span></div>';
   }).join('') : '<div class="lb-empty">기록 없음</div>';
-  return '<div class="lb-card"><div class="lb-title">'+title+'</div>'+body+'</div>';
+  var mineRow = '';
+  if(mine){
+    var rankTxt = (mine.rank>0) ? (mine.rank+'위') : '순위 밖';
+    mineRow = '<div class="lb-mine"><span class="lb-mine-k">내 기록</span>'
+      + '<span class="lb-mine-r">'+rankTxt+'</span>'
+      + '<span class="lb-val oswald">'+mine.v+'<small>'+unit+'</small></span></div>';
+  }
+  return '<div class="lb-card"><div class="lb-title">'+title+'</div>'+body+mineRow+'</div>';
 }
 function setRecTab(t){ state.recTab=t; render(); }
 function setH2hOpp(o){ state.h2hOpp=o; render(); }
@@ -2349,7 +2391,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.74</p>';
+  + '<p class="hint">동네 축구왕 · v0.75</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
@@ -3629,7 +3671,11 @@ function openPlayerForm(id){
    +   '<div class="field"><label>지역</label><input id="f_region" type="text" placeholder="서울 강서" value="'+(p&&p.region?p.region:'')+'"></div>'
    +   '<button class="btn-primary" onclick="savePlayer()">'+(id?'수정 완료':'등록하기')+'</button>'
    +   ((id && isAdmin()) ? ((p&&(p.accountId||p.ownerId))
-              ? '<div class="field" style="margin-top:10px;"><label>계정 연결</label><div style="font-size:13px;color:var(--steel-soft);padding:6px 0;">✅ 이 팀원은 계정과 연결되어 있어요.</div></div>'
+              ? '<div class="field" style="margin-top:10px;"><label>계정 연결</label>'
+                +'<div style="font-size:13px;color:var(--steel-soft);padding:6px 0;">✅ 이 팀원은 계정과 연결되어 있어요.</div>'
+                +'<button class="btn-ghost" style="width:100%;margin-top:4px;" onclick="openMergePlayer_(\''+id+'\')">🔗 이 계정을 다른 팀원으로 옮기기</button>'
+                +'<p class="hint" style="margin:6px 2px 0;">따로 가입해 새로 생긴 계정을 기존에 등록한 팀원 정보로 통합할 때 사용해요.</p>'
+                +'</div>'
               : '<div style="display:flex;gap:8px;margin-top:8px;">'
                 +'<button class="btn-ghost" style="flex:1;" onclick="inviteMemberKakao_(\''+id+'\')">💬 카카오톡 초대</button>'
                 +'<button class="btn-ghost" style="flex:1;" onclick="copyMemberInvite(\''+id+'\')">🔗 링크 복사</button>'
@@ -3703,6 +3749,39 @@ function doDeletePlayer(id){
   state.players = state.players.filter(function(p){return p.id!==id;});
   closeSheet(); render(); toast('삭제되었습니다');
   API.run('deletePlayer', id).then(function(list){ state.players = list; if(state.screen==='team') render(); }).catch(function(){ toast('삭제 저장 실패 · 새로고침'); });
+}
+/* 계정 연결 옮기기(통합): 계정연결된 B를 → 계정 미연결 기존 팀원 A로 통합 */
+function openMergePlayer_(fromId){
+  if(!requireAdmin()) return;
+  var from=(state.players||[]).filter(function(x){return x.id===fromId;})[0]; if(!from) return;
+  var cands=(state.players||[]).filter(function(x){ return x.id!==fromId && !x.accountId && !x.ownerId; }).slice().sort(numSort);
+  var list = cands.length ? cands.map(function(p){
+    return '<div class="player" style="margin-bottom:8px;cursor:pointer;" onclick="confirmMergePlayer_(\''+fromId+'\',\''+p.id+'\')">'
+      + '<div style="width:40px;height:40px;border-radius:11px;background:var(--ink);display:flex;align-items:center;justify-content:center;flex:0 0 auto;color:#fff;font-weight:700;" class="oswald">'+numDisp(p.num)+'</div>'
+      + '<div class="meta" style="margin-left:10px;"><div class="pname">'+esc(p.name)+'</div><div class="sub">계정 미연결'+(p.role==='임원'?' · 임원':'')+'</div></div>'
+      + '<div style="color:var(--red);font-size:12px;font-weight:700;">여기로 통합 ›</div></div>';
+  }).join('') : '<div class="empty" style="padding:22px;"><div class="ei">🔗</div>통합할 수 있는 팀원이 없어요.<br><span style="font-size:12px;color:var(--steel-soft);">계정이 연결되지 않은 기존 팀원만 대상이 됩니다.</span></div>';
+  showSheet('<div class="grabber"></div>'
+   + '<div class="sheet-head"><h3>계정 연결 옮기기</h3><button class="x" onclick="closeSheet()">✕</button></div>'
+   + '<div class="sheet-body">'
+   +   '<p style="font-size:13px;color:var(--steel);margin:0 0 12px;line-height:1.6;"><b>'+esc(from.name)+'</b> 님의 계정을 아래에서 고른 <b>기존 팀원</b>에 연결하고, <b>'+esc(from.name)+'</b> 항목은 삭제해요. (기록은 대상 팀원으로 옮겨집니다)</p>'
+   +   list
+   + '</div>');
+}
+function confirmMergePlayer_(fromId, toId){
+  var from=(state.players||[]).filter(function(x){return x.id===fromId;})[0];
+  var to=(state.players||[]).filter(function(x){return x.id===toId;})[0];
+  if(!from||!to) return;
+  appConfirm_('‘'+from.name+'’의 계정을 ‘'+to.name+'’에 연결하고\n‘'+from.name+'’ 항목을 삭제할까요?\n\n· ‘'+from.name+'’의 기록은 ‘'+to.name+'’(으)로 옮겨집니다.\n· 되돌릴 수 없어요.', function(){
+    API.run('mergePlayer', fromId, toId).then(function(r){
+      if(r && r.ok){
+        if(r.players) state.players=r.players;
+        if(r.memberships && state.auth && (from.accountId===state.auth.ownerId)){ state.auth.memberships=r.memberships; saveSession(state.auth); }
+        closeSheet(); toast('‘'+to.name+'’(으)로 계정을 연결했어요');
+        render();
+      } else { toast((r&&r.error)||'통합에 실패했어요'); }
+    }).catch(function(){ toast('통합 저장 실패 · 새로고침'); });
+  });
 }
 function closeSheet(){
   document.getElementById('sheetWrap').classList.remove('open');
@@ -4720,6 +4799,7 @@ var FS_MAP = {
 };
 var WRITE_TOUCH = {
   addPlayer:['players'], updatePlayer:['players'], deletePlayer:['players','members'], setMemberRole:['players'],
+  mergePlayer:['players','stats','attendance','matchRoster','members','votes'],
   addMatch:['matches'], updateMatch:['matches'], deleteMatch:['matches','squads','members','notes'], recordMatchResult:['matches'],
   createSquad:['squads'], deleteSquad:['squads','members','notes'], renameSquad:['squads'],
   setSquadMember:['members'], setSquadMemberPos:['members'], removeSquadMember:['members'],
