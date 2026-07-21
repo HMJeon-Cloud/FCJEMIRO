@@ -2391,7 +2391,7 @@ function viewMore(){
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
-  + '<p class="hint">동네 축구왕 · v0.76</p>';
+  + '<p class="hint">동네 축구왕 · v0.77</p>';
 }
 function importSection_(){
   return '<div class="eyebrow" style="margin-top:22px;">엑셀 가져오기 <span style="font-size:10px;color:var(--steel-soft);">(구단주 전용)</span></div>'
@@ -3512,10 +3512,9 @@ function openClubForm(clubId){
    +     '<div id="cb_bgprev" style="width:100%;height:76px;border-radius:12px;border:1px solid var(--line-strong);background:#15131b '+(clubBgData?('center/cover no-repeat url('+clubBgData+')'):'')+';overflow:hidden;position:relative;">'
    +       '<div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(10,9,14,.35),rgba(10,9,14,.6));"></div>'
    +       '<span id="cb_bghint" style="position:absolute;left:12px;top:50%;transform:translateY(-50%);color:'+(clubBgData?'#fff':'var(--steel-soft)')+';font-size:12px;font-weight:600;z-index:1;">'+(clubBgData?'적용된 배경':'기본 배경 사용 중')+'</span></div>'
-   +     '<div style="display:flex;gap:8px;margin-top:8px;">'
-   +       '<label class="btn-ghost" style="flex:1;margin:0;text-align:center;cursor:pointer;">배경 이미지 선택<input id="cb_bgfile" type="file" accept="image/*" style="display:none;" onchange="pickClubBg(this)"></label>'
-   +       '<button class="btn-ghost" type="button" style="flex:0 0 auto;" onclick="clearClubBg()">기본으로</button>'
-   +     '</div></div>'
+   +     '<label class="btn-ghost" style="display:block;width:100%;margin:8px 0 0;text-align:center;cursor:pointer;">배경 이미지 선택<input id="cb_bgfile" type="file" accept="image/*" style="display:none;" onchange="pickClubBg(this)"></label>'
+   +     '<button class="btn-ghost" type="button" style="width:100%;margin-top:8px;" onclick="clearClubBg()">기본으로</button>'
+   +   '</div>'
    +   '<div class="field"><label>팀명<span class="req">*</span></label><input id="cb_name" type="text" value="'+(c?esc(c.name):'')+'"></div>'
    +   '<div class="field"><label>지역</label><select id="cb_region">'+regOpts+'</select></div>'
    +   '<div class="field"><label>비고</label><input id="cb_note" type="text" value="'+(c&&c.note?esc(c.note):'')+'"></div>'
