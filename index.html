@@ -358,6 +358,13 @@
   .r-w{background:#E4F5EC;color:var(--ok);}
   .r-l{background:var(--red-tint);color:var(--red);}
   .r-d{background:#F0F1F3;color:var(--steel);}
+  /* 출석탭 과거 경기: 한 줄 요약 행 */
+  .hist-row{display:flex;align-items:center;gap:9px;padding:9px 12px;border:1px solid var(--line);border-radius:11px;background:var(--card);margin-bottom:7px;cursor:pointer;box-shadow:var(--shadow-sm);-webkit-tap-highlight-color:transparent;}
+  .hist-row:active{background:rgba(17,16,21,.04);}
+  .hr-date{font-size:12.5px;color:var(--steel);font-weight:600;flex:0 0 auto;}
+  .hr-score{font-family:'Oswald';font-size:14px;font-weight:700;color:var(--ink);margin-left:auto;letter-spacing:.04em;flex:0 0 auto;}
+  .hr-na{font-size:10.5px;color:var(--steel-soft);font-weight:600;}
+  .hr-arrow{color:var(--steel-soft);font-size:14px;font-weight:700;flex:0 0 auto;}
   .match-mid{display:flex;align-items:center;justify-content:space-between;margin-top:11px;}
   .team-side{display:flex;flex-direction:column;align-items:center;gap:5px;flex:1;}
   .team-side .cn{font-size:13px;font-weight:700;}
@@ -833,7 +840,7 @@ var FIREBASE_CONFIG = {
 var APP_NAME = '동네 축구왕';
 var APP_SUB = 'KICKTOWN';
 /* 현재 앱 버전 (version.json과 비교해 최신 아니면 자동 업데이트) */
-var APP_VERSION = '0.92';
+var APP_VERSION = '0.93';
 /* 동축_아이콘: 로그인/팀탭 대표 이미지 (256x256 남색 PNG, 여백 없음) */
 var APP_LOGO = 'logo.png';
 /* 동축_배경: 헤더 배경 이미지 (1000x545 JPEG). 비우면 다크 그라디언트로 fallback */
@@ -2481,18 +2488,16 @@ function viewAttHistory_(cur){
   var rows=shown.map(function(m){
     var has=(m.result==='W'||m.result==='D'||m.result==='L');
     var cls=m.result==='W'?'r-w':(m.result==='L'?'r-l':'r-d');
-    var right=has?('<span class="result '+cls+'">'+m.result+'</span>'):'<span style="font-size:11px;color:var(--steel-soft);">결과 미입력</span>';
-    var mid=has?('<div class="score oswald">'+m.ourScore+'<span class="vs">:</span>'+m.oppScore+'</div>')
-               :'<div class="oswald" style="font-size:15px;color:var(--steel-soft);">VS</div>';
-    return '<div class="match" style="margin-bottom:10px;cursor:pointer;" onclick="openMatchReport(\''+m.id+'\')">'
-      + '<div class="match-top"><span>'+fmtDateDot(m.date)+(cleanTime(m.time)?' '+cleanTime(m.time):'')+'</span>'+right+'</div>'
-      + '<div class="match-mid"><div class="team-side"><span class="cn">'+esc(ourTeamName_())+'</span></div>'+mid
-      + '<div class="team-side"><span class="cn">'+esc(m.opponent||'상대 미정')+'</span></div></div></div>';
+    var badge=has?('<span class="result '+cls+'">'+m.result+'</span>'):'<span class="hr-na">미입력</span>';
+    var score=has?(m.ourScore+' : '+m.oppScore):'-';
+    return '<div class="hist-row" onclick="openMatchReport(\''+m.id+'\')">'
+      + '<span class="hr-date">'+fmtDateDot(m.date)+'</span>'+badge
+      + '<span class="hr-score">'+score+'</span><span class="hr-arrow">›</span></div>';
   }).join('');
   var rest=past.length-shown.length;
   var more=(rest>0)?'<button class="rec-more" onclick="attHistShowMore_()">과거 경기 더 보기 · '+Math.min(ATT_HIST_PAGE, rest)+'경기 (남은 '+rest+')</button>':'';
   return '<div class="section"><div class="eyebrow">vs '+esc(opp)+' · 지난 경기</div>'+rows+more
-    + '<p class="hint" style="margin:4px 2px 0;">이 상대와의 지난 경기예요. 탭하면 득점·도움·출석 상세를 볼 수 있어요.</p></div>';
+    + '<p class="hint" style="margin:4px 2px 0;">탭하면 득점·도움·출석 상세를 볼 수 있어요.</p></div>';
 }
 function viewAtt(){
   var m = latestMatch();
