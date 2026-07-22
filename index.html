@@ -830,7 +830,7 @@ var FIREBASE_CONFIG = {
 var APP_NAME = '동네 축구왕';
 var APP_SUB = 'KICKTOWN';
 /* 현재 앱 버전 (version.json과 비교해 최신 아니면 자동 업데이트) */
-var APP_VERSION = '0.89';
+var APP_VERSION = '0.90';
 /* 동축_아이콘: 로그인/팀탭 대표 이미지 (256x256 남색 PNG, 여백 없음) */
 var APP_LOGO = 'logo.png';
 /* 동축_배경: 헤더 배경 이미지 (1000x545 JPEG). 비우면 다크 그라디언트로 fallback */
@@ -2464,10 +2464,14 @@ function fmtMatchWhen(m){
 var ATT_HIST_PAGE = 3;
 function attToday_(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
 function attHistShowMore_(){ state.attHistShow=(state.attHistShow||ATT_HIST_PAGE)+ATT_HIST_PAGE; render(); }
-function viewAttHistory_(){
+/* 체크인 대상 경기의 '상대팀'과 치른 과거 경기만 (최근 3 + 더보기) */
+function viewAttHistory_(cur){
+  var opp = cur && cur.opponent ? cur.opponent : '';
+  if(!opp) return '';   // 상대팀이 정해진 경기가 있을 때만 표시
   var today=attToday_();
-  var past=(state.matches||[]).filter(function(m){ return m && m.date && m.date<=today; })
-    .sort(function(a,b){ return b.date.localeCompare(a.date); });
+  var past=(state.matches||[]).filter(function(m){
+    return m && m.date && m.opponent===opp && m.id!==(cur&&cur.id) && m.date<=today;
+  }).sort(function(a,b){ return b.date.localeCompare(a.date); });
   if(!past.length) return '';
   var cap=state.attHistShow||ATT_HIST_PAGE;
   var shown=past.slice(0, cap);
@@ -2484,12 +2488,12 @@ function viewAttHistory_(){
   }).join('');
   var rest=past.length-shown.length;
   var more=(rest>0)?'<button class="rec-more" onclick="attHistShowMore_()">과거 경기 더 보기 · '+Math.min(ATT_HIST_PAGE, rest)+'경기 (남은 '+rest+')</button>':'';
-  return '<div class="section"><div class="eyebrow">과거 경기 기록</div>'+rows+more
-    + '<p class="hint" style="margin:4px 2px 0;">경기를 탭하면 득점·도움·출석 상세를 볼 수 있어요.</p></div>';
+  return '<div class="section"><div class="eyebrow">vs '+esc(opp)+' · 지난 경기</div>'+rows+more
+    + '<p class="hint" style="margin:4px 2px 0;">이 상대와의 지난 경기예요. 탭하면 득점·도움·출석 상세를 볼 수 있어요.</p></div>';
 }
 function viewAtt(){
-  var hist = viewAttHistory_();
   var m = latestMatch();
+  var hist = viewAttHistory_(m);
   var radius = state.cfg.checkinRadiusM || 100;
   var lateMin = (state.cfg.lateThresholdMin != null) ? state.cfg.lateThresholdMin : 0;
   var myPid = authId();
@@ -2520,7 +2524,7 @@ function viewAtt(){
   }
 
   var lateLabel = (lateMin===0) ? '경기 시작 시각' : ('경기 시작 '+lateMin+'분 전');
-  if(m && m.useAtt===false){ return hist + card + '<p class="hint">출석을 사용하는 경기가 등록되면 여기에서 출석·지각·불참을 기록할 수 있어요.</p>'; }
+  if(m && m.useAtt===false){ return card + hist + '<p class="hint">출석을 사용하는 경기가 등록되면 여기에서 출석·지각·불참을 기록할 수 있어요.</p>'; }
   // 출석 설정(체크인 반경·지각 기준·점수)은 임원에게만 노출. 팀원에게는 지각 기준 안내문만 표시
   var lateScore = (state.cfg.lateScore!=null) ? Number(state.cfg.lateScore) : 0.5;
   var absentScore = (state.cfg.absentScore!=null) ? Number(state.cfg.absentScore) : -1;
@@ -2540,8 +2544,8 @@ function viewAtt(){
       +   '<p style="font-size:11.5px;color:var(--steel-soft);margin:8px 2px 0;">기록 탭 출석 순위 집계에 반영돼요. (미참석은 0점)</p>'
       + '</div>')
     : ('<p style="font-size:11.5px;color:var(--steel-soft);margin:10px 2px 0;">'+lateLabel+'까지 체크인하지 않으면 지각으로 기록됩니다.</p>');
-  return hist
-  + card
+  return card
+  + hist
   + attMarkingSection(m)
   + settingsSec
   + '<p class="hint">체크인 시 휴대폰 위치로 경기장까지의 거리를 계산합니다.</p>';
