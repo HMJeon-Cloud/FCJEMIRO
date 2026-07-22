@@ -85,6 +85,9 @@
     background-image:var(--hero-img, linear-gradient(150deg,#17151D 0%,#111015 55%,#0D0C11 100%));
     background-size:cover;background-position:center 30%;
   }
+  /* 팀 배경 사진이 있으면 헤더를 사진 비율에 가깝게 키워 잘림을 최소화 */
+  .topbar.has-bg{ min-height:150px; }
+  .topbar.has-bg::before{ background-position:center center; }
   /* 글자 가독성용 어두운 오버레이 */
   .topbar::after{
     content:"";position:absolute;inset:0;z-index:1;
@@ -830,7 +833,7 @@ var FIREBASE_CONFIG = {
 var APP_NAME = '동네 축구왕';
 var APP_SUB = 'KICKTOWN';
 /* 현재 앱 버전 (version.json과 비교해 최신 아니면 자동 업데이트) */
-var APP_VERSION = '0.90';
+var APP_VERSION = '0.92';
 /* 동축_아이콘: 로그인/팀탭 대표 이미지 (256x256 남색 PNG, 여백 없음) */
 var APP_LOGO = 'logo.png';
 /* 동축_배경: 헤더 배경 이미지 (1000x545 JPEG). 비우면 다크 그라디언트로 fallback */
@@ -2745,7 +2748,6 @@ function viewMore(){
   +   '<div class="list-row"><span class="nm" style="flex:1;">로그인 계정</span><span class="val" style="font-size:13.5px;color:var(--ink);">'+who+'</span></div>'
   +   (isAdmin() && ownClub() ? '<div class="list-row" style="cursor:pointer;" onclick="openClubForm(\''+ownClub().id+'\')"><span class="nm" style="flex:1;">우리 팀 정보 수정</span><span class="val" style="color:var(--red);font-size:14px;">'+esc(ownClub().name)+' ›</span></div>' : '')
   +   (isAdmin()?'<div class="list-row" style="cursor:pointer;" onclick="openRoleManage()"><span class="nm" style="flex:1;">권한 관리</span><span class="val" style="color:var(--red);font-size:14px;">임원/팀원 ›</span></div>':'')
-  +   (isAdmin()?'<div class="list-row" style="cursor:pointer;" onclick="copyVenueLink(location.hostname)"><span class="nm" style="flex:1;">현재 도메인 <span style="font-size:10px;color:var(--steel-soft);">(카카오맵 등록용)</span></span><span class="val" style="font-size:11.5px;color:var(--steel);word-break:break-all;">'+esc(location.hostname)+'</span></div>':'')
   +   (state.auth && state.auth.provider!=='kakao' ? '<div class="list-row" style="cursor:pointer;" onclick="openChangePw()"><span class="nm" style="flex:1;">비밀번호 변경</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>' : '')
   +   '<div class="list-row" style="cursor:pointer;" onclick="logout()"><span class="nm" style="flex:1;color:var(--red);">로그아웃</span><span class="val" style="color:var(--red);font-size:14px;">›</span></div>'
   + '</div>'
@@ -3746,6 +3748,8 @@ function setHeaderBg_(url){
   var v = url ? ('url("'+url+'")') : (APP_BG ? ('url("'+APP_BG+'")') : '');
   if(v) document.documentElement.style.setProperty('--hero-img', v);
   else document.documentElement.style.removeProperty('--hero-img');
+  // 팀 전용 배경 사진이 있을 때만 헤더를 키움 (기본 배경은 짧은 헤더 유지)
+  var tb=document.querySelector('.topbar'); if(tb) tb.classList.toggle('has-bg', !!url);
 }
 function applyAppHeader(){ setHeader_(APP_LOGO, esc(APP_NAME), APP_SUB); setHeaderBg_(''); }
 function activeClub(){ return (state.clubs||[]).filter(function(c){return c.id===state.activeClubId;})[0] || null; }
@@ -3898,19 +3902,31 @@ function pickEmblem(input){
   };
   reader.readAsDataURL(file);
 }
-/* 팀 헤더 배경 이미지: 헤더 폭에 맞게 축소(가로 최대 720) 후 JPEG로 저장 */
+/* 원본 비율 유지로 축소 + 고품질 JPEG 인코딩. Firestore 문서 한도(≈1MB) 안에 들도록
+   품질→해상도 순으로 자동 조절하며 용량을 맞춘다. (선명도 우선) */
+function encodeImgUnder_(img, maxW, maxH, budgetChars){
+  var r=Math.min(maxW/img.width, maxH/img.height, 1);
+  var w=Math.max(1, Math.round(img.width*r)), h=Math.max(1, Math.round(img.height*r));
+  var url='';
+  for(var attempt=0; attempt<7; attempt++){
+    var c=document.createElement('canvas'); c.width=w; c.height=h;
+    var ctx=c.getContext('2d'); try{ ctx.imageSmoothingEnabled=true; ctx.imageSmoothingQuality='high'; }catch(e){}
+    ctx.drawImage(img,0,0,w,h);
+    var q=0.88; url=c.toDataURL('image/jpeg', q);
+    while(url.length>budgetChars && q>0.5){ q-=0.08; url=c.toDataURL('image/jpeg', q); }
+    if(url.length<=budgetChars) break;
+    w=Math.round(w*0.85); h=Math.round(h*0.85);   // 여전히 크면 해상도 축소 후 재시도
+  }
+  return url;
+}
+/* 팀 헤더 배경 이미지: 원본 비율 유지·고해상도(가로 최대 1440)로 저장 → 선명하게, 덜 잘리게 */
 function pickClubBg(input){
   var file = input.files && input.files[0]; if(!file) return;
   var reader = new FileReader();
   reader.onload = function(e){
     var img = new Image();
     img.onload = function(){
-      var maxW=720, maxH=420;
-      var r=Math.min(maxW/img.width, maxH/img.height, 1);
-      var w=Math.round(img.width*r), h=Math.round(img.height*r);
-      var c=document.createElement('canvas'); c.width=w; c.height=h;
-      c.getContext('2d').drawImage(img,0,0,w,h);
-      clubBgData = c.toDataURL('image/jpeg', 0.78);
+      clubBgData = encodeImgUnder_(img, 1440, 960, 820000);   // ≈0.8MB 이내로 유지
       var pv=document.getElementById('cb_bgprev'); if(pv){ pv.style.background='#15131b center/cover no-repeat url('+clubBgData+')'; }
       var hint=document.getElementById('cb_bghint'); if(hint){ hint.textContent='적용된 배경'; hint.style.color='#fff'; }
     };
@@ -4807,7 +4823,7 @@ var MANUAL = [
     + mnRow_('🎨','팀 정보 수정에서 <b>엠블럼</b>과 <b>헤더 배경 이미지</b>를 팀 전용으로 등록할 수 있어요. (없으면 기본 이미지)')
     + mnRow_('📥','구단주는 <b>엑셀 양식</b>으로 팀원·경기 기록을 한 번에 등록해요. 경기 기록은 <b>선수 출석·선수 기록·경기 기록 3탭</b> 양식이고, 기존 경기가 있으면 <b>일자·시간·상대팀</b>으로 찾아 수정, 없으면 추가돼요.')
     + mnRow_('🔄','접속하면 항상 <b>최신 버전으로 자동 업데이트</b>돼요. 화면 맨 위에서 <b>당겨서 새로고침</b>도 가능!')
-    + mnRow_('📲','휴대폰 홈 화면에 추가하면 <b>앱처럼</b> 쓸 수 있어요. 안드로이드는 "앱 설치" 안내가 떠요.<br><button class="btn-ghost" style="margin-top:8px;padding:9px 12px;width:100%;" onclick="openAddHomeGuide_()">📱 아이폰 홈 화면 추가 방법 보기</button>'); }}
+    + mnRow_('📲','휴대폰 홈 화면에 추가하면 <b>앱처럼</b> 쓸 수 있어요.<br><button class="btn-ghost" style="margin-top:8px;padding:9px 12px;width:100%;" onclick="openAddHomeGuideAndroid_()">🤖 Android 홈 화면 추가 방법</button><button class="btn-ghost" style="margin-top:6px;padding:9px 12px;width:100%;" onclick="openAddHomeGuide_()">📱 iOS 홈 화면 추가 방법</button>'); }}
 ];
 /* 아이폰(사파리) 홈 화면 추가 안내 — 3단계 일러스트 */
 function ahStep_(n, title, desc, svg){
@@ -4848,13 +4864,51 @@ function openAddHomeGuide_(){
     + '<text x="60" y="78" font-size="10" fill="#9aa">hmjeon-cloud.github.io</text>'
     + '</svg>';
   showSheet('<div class="grabber"></div>'
-   + '<div class="sheet-head"><h3>📱 아이폰 홈 화면에 추가</h3><button class="x" onclick="openManual(\'more\')">✕</button></div>'
+   + '<div class="sheet-head"><h3>📱 iOS 홈 화면에 추가</h3><button class="x" onclick="openManual(\'more\')">✕</button></div>'
    + '<div class="sheet-body">'
    +   '<p style="font-size:12.5px;color:var(--steel-soft);margin:0 0 14px;line-height:1.55;"><b>사파리(Safari)</b>에서 이 페이지를 연 상태로 진행하세요. (크롬 등 다른 브라우저에서는 “공유 → 홈 화면에 추가”가 없을 수 있어요.)</p>'
    +   ahStep_(1,'하단의 <b>공유 버튼</b>을 탭','화면 아래(기종에 따라 위)의 네모+위 화살표 아이콘이에요.', svg1)
    +   ahStep_(2,'<b>“홈 화면에 추가”</b>를 선택','메뉴를 아래로 조금 내리면 있어요.', svg2)
    +   ahStep_(3,'오른쪽 위 <b>“추가”</b>를 탭','홈 화면에 동축 아이콘이 생겨요. 이제 앱처럼 열 수 있어요!', svg3)
-   +   '<p style="font-size:11.5px;color:var(--steel-soft);margin:4px 2px 0;">안드로이드(크롬/삼성인터넷)는 접속 시 “앱 설치/홈 화면에 추가” 안내가 자동으로 떠요.</p>'
+   +   '<p style="font-size:11.5px;color:var(--steel-soft);margin:4px 2px 0;">안드로이드(크롬/삼성인터넷)는 위쪽 <b>Android 홈 화면 추가 방법</b>을 참고하세요.</p>'
+   + '</div>');
+}
+/* 안드로이드(크롬/삼성인터넷) 홈 화면 추가 안내 — 3단계 일러스트 */
+function openAddHomeGuideAndroid_(){
+  // 1) 우측 상단 ⋮ 메뉴
+  var svg1 = '<svg viewBox="0 0 260 58" style="width:100%;max-width:260px;">'
+    + '<rect x="1" y="1" width="258" height="56" rx="15" fill="#fff" stroke="#e5e4ea"/>'
+    + '<rect x="16" y="18" width="150" height="22" rx="11" fill="#f4f3f6"/><text x="28" y="33" font-size="11" fill="#9aa">hmjeon-cloud.github.io</text>'
+    + '<circle cx="228" cy="29" r="20" fill="#FDECEE" stroke="#C8102E" stroke-width="2.5"/>'
+    + '<g fill="#C8102E"><circle cx="228" cy="21" r="2.6"/><circle cx="228" cy="29" r="2.6"/><circle cx="228" cy="37" r="2.6"/></g>'
+    + '<text x="228" y="55" text-anchor="middle" font-size="9" fill="#C8102E" font-weight="700">메뉴</text>'
+    + '</svg>';
+  // 2) 메뉴에서 '홈 화면에 추가' / '앱 설치'
+  var svg2 = '<svg viewBox="0 0 260 130" style="width:100%;max-width:260px;">'
+    + '<rect x="1" y="1" width="258" height="128" rx="16" fill="#fff" stroke="#e5e4ea"/>'
+    + '<text x="20" y="30" font-size="12" fill="#9aa">새 탭</text>'
+    + '<text x="20" y="56" font-size="12" fill="#9aa">방문 기록</text>'
+    + '<rect x="10" y="72" width="240" height="44" rx="11" fill="#FDECEE" stroke="#C8102E" stroke-width="2"/>'
+    + '<g stroke="#111015" stroke-width="1.9" fill="none"><rect x="26" y="85" width="18" height="18" rx="4"/><path d="M35 89v10M30 94h10"/></g>'
+    + '<text x="56" y="99" font-size="12.5" fill="#111015" font-weight="700">홈 화면에 추가 / 앱 설치</text>'
+    + '</svg>';
+  // 3) '추가/설치' 확인
+  var svg3 = '<svg viewBox="0 0 260 92" style="width:100%;max-width:260px;">'
+    + '<rect x="1" y="1" width="258" height="90" rx="16" fill="#fff" stroke="#e5e4ea"/>'
+    + '<rect x="20" y="18" width="30" height="30" rx="8" fill="#1B1440"/><text x="35" y="38" text-anchor="middle" font-size="11" fill="#E7C878" font-weight="700">동축</text>'
+    + '<text x="60" y="30" font-size="12.5" fill="#111015" font-weight="600">동네 축구왕</text>'
+    + '<text x="60" y="44" font-size="10" fill="#9aa">홈 화면에 추가할까요?</text>'
+    + '<rect x="150" y="58" width="44" height="24" rx="8" fill="#f4f3f6"/><text x="172" y="74" text-anchor="middle" font-size="11" fill="#9aa">취소</text>'
+    + '<rect x="200" y="58" width="46" height="24" rx="8" fill="#FDECEE" stroke="#C8102E" stroke-width="2"/><text x="223" y="74" text-anchor="middle" font-size="11" fill="#C8102E" font-weight="800">추가</text>'
+    + '</svg>';
+  showSheet('<div class="grabber"></div>'
+   + '<div class="sheet-head"><h3>🤖 Android 홈 화면에 추가</h3><button class="x" onclick="openManual(\'more\')">✕</button></div>'
+   + '<div class="sheet-body">'
+   +   '<p style="font-size:12.5px;color:var(--steel-soft);margin:0 0 14px;line-height:1.55;"><b>크롬(Chrome)</b> 또는 <b>삼성 인터넷</b>에서 이 페이지를 연 상태로 진행하세요. 접속 시 화면 아래에 <b>“앱 설치”</b> 안내가 자동으로 뜨면 그걸 눌러도 돼요.</p>'
+   +   ahStep_(1,'오른쪽 위 <b>⋮ 메뉴</b>를 탭','주소창 오른쪽의 점 3개 아이콘이에요. (삼성 인터넷은 아래쪽 ≡ 메뉴)', svg1)
+   +   ahStep_(2,'<b>“홈 화면에 추가”</b>(또는 “앱 설치”)를 선택','메뉴 목록에서 찾아 탭하세요.', svg2)
+   +   ahStep_(3,'<b>“추가”</b>를 탭','홈 화면에 동축 아이콘이 생겨요. 이제 앱처럼 열 수 있어요!', svg3)
+   +   '<p style="font-size:11.5px;color:var(--steel-soft);margin:4px 2px 0;">아이폰(Safari)은 위쪽 <b>iOS 홈 화면 추가 방법</b>을 참고하세요.</p>'
    + '</div>');
 }
 function manualTopicForScreen_(){
