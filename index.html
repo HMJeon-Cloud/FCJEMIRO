@@ -845,7 +845,7 @@ var APPCHECK_SITE_KEY = '여기에_reCAPTCHA_사이트키_붙여넣기';
 var APP_NAME = '동네 축구왕';
 var APP_SUB = 'KICKTOWN';
 /* 현재 앱 버전 (version.json과 비교해 최신 아니면 자동 업데이트) */
-var APP_VERSION = '0.98';
+var APP_VERSION = '0.99';
 /* 동축_아이콘: 로그인/팀탭 대표 이미지 (256x256 남색 PNG, 여백 없음) */
 var APP_LOGO = 'logo.png';
 /* 동축_배경: 헤더 배경 이미지 (1000x545 JPEG). 비우면 다크 그라디언트로 fallback */
@@ -5890,6 +5890,17 @@ function fsLoadKidsForMatches_(cid, ids){
   FS._kidsQ[cid] = next.catch(function(){});
   return next;
 }
+/* 특정 선수의 기록만 로드 — 개인기록 화면은 본인 1명분만 사용 */
+FS._pkid={};
+function fsLoadPlayerKids_(cid, pid){
+  if(!cid || !pid) return Promise.resolve();
+  var key = cid+'__'+pid;
+  if(FS._pkid[key]) return FS._pkid[key];
+  FS._pkid[key] = fsLoadTeam(cid).then(function(){
+    return Promise.all([ fsQ('playerStats','playerId',pid), fsQ('attendance','playerId',pid) ]);
+  }).then(function(r){ fsMerge('stats',r[0]); fsMerge('attendance',r[1]); });
+  return FS._pkid[key];
+}
 FS._pk={};
 function fsLoadPollKids(cid){
   if(!cid) return Promise.resolve();
@@ -5929,7 +5940,7 @@ FS.run = function(fn, args){
     else if(fn==='getRecordBundle'){ pre = fsLoadMatchKids(cid, args[0]); }
     else if(fn==='getMatchReport'){ pre = fsLoadKidsForMatches_(cid, [args[0]]); }
     else if(fn==='getPolls'||fn==='getPollDetail'||fn==='getMomList'){ pre = fsLoadPollKids(cid); }
-    else if(fn==='getPlayerCareer'){ pre = Promise.all([fsLoadMatchKids(cid,'전체'), fsLoadPollKids(cid)]); }
+    else if(fn==='getPlayerCareer'){ pre = Promise.all([fsLoadPlayerKids_(cid, args[0]), fsLoadPollKids(cid)]); }
     else if(fn==='getSquadDetail'){ pre = fsLoadSquadKids(args[0]); }
     else if(cid){ pre = fsLoadTeam(cid); var t=WRITE_TOUCH[fn]||[];
       if(t.indexOf('stats')>-1||t.indexOf('attendance')>-1||t.indexOf('matchRoster')>-1){
