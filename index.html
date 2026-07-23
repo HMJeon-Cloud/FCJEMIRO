@@ -845,7 +845,7 @@ var APPCHECK_SITE_KEY = '여기에_reCAPTCHA_사이트키_붙여넣기';
 var APP_NAME = '동네 축구왕';
 var APP_SUB = 'KICKTOWN';
 /* 현재 앱 버전 (version.json과 비교해 최신 아니면 자동 업데이트) */
-var APP_VERSION = '0.99';
+var APP_VERSION = '1.0';
 /* 동축_아이콘: 로그인/팀탭 대표 이미지 (256x256 남색 PNG, 여백 없음) */
 var APP_LOGO = 'logo.png';
 /* 동축_배경: 헤더 배경 이미지 (1000x545 JPEG). 비우면 다크 그라디언트로 fallback */
@@ -5855,7 +5855,8 @@ function fsLoadTeam(cid){
   return FS._team[cid];
 }
 /* 경기 상세(득점/출석/명단): 그 팀 경기 id 기준 청크 조회 */
-FS._kidMids={};   // cid -> {matchId:1} 이미 로드된 경기 kids (기간별 델타 로드)
+FS._kidMids={};   // cid -> {matchId:1} 득점·출석·명단까지 모두 로드된 경기
+FS._kidLite={};   // cid -> {matchId:1} 득점·출석만 로드된 경기 (기록·통계용)
 FS._kidsQ={};     // cid -> 직렬화 큐(동시 호출 시 동일 경기 중복 조회 방지)
 function fsLoadMatchKids(cid, period){
   if(!cid) return Promise.resolve();
@@ -5868,10 +5869,12 @@ function fsLoadMatchKids(cid, period){
       if(period && period!=='전체') return m.date && m.date.indexOf(period)===0;
       return true;
     }).map(function(m){return m.id;});
-    var need=want.filter(function(id){ return !loaded[id]; });   // 아직 안 실린 것만
+    var lite = FS._kidLite[cid] || (FS._kidLite[cid]={});
+    // 기록·통계 화면은 명단(matchRoster)을 쓰지 않음 → 득점·출석만 읽어 1/3 절약
+    var need=want.filter(function(id){ return !loaded[id] && !lite[id]; });
     if(!need.length) return;
-    return Promise.all([ fsIn('playerStats','matchId',need), fsIn('attendance','matchId',need), fsIn('matchRoster','matchId',need) ])
-      .then(function(r){ fsMerge('stats',r[0]); fsMerge('attendance',r[1]); fsMerge('matchRoster',r[2]); need.forEach(function(id){ loaded[id]=1; }); });
+    return Promise.all([ fsIn('playerStats','matchId',need), fsIn('attendance','matchId',need) ])
+      .then(function(r){ fsMerge('stats',r[0]); fsMerge('attendance',r[1]); need.forEach(function(id){ lite[id]=1; }); });
   });
   FS._kidsQ[cid] = next.catch(function(){});   // 오류가 나도 큐가 막히지 않게
   return next;
@@ -5882,10 +5885,21 @@ function fsLoadKidsForMatches_(cid, ids){
   var prev = FS._kidsQ[cid] || Promise.resolve();
   var next = prev.then(function(){ return fsLoadTeam(cid); }).then(function(){
     var loaded = FS._kidMids[cid] || (FS._kidMids[cid]={});
-    var need = ids.filter(function(id){ return id && !loaded[id]; });
-    if(!need.length) return;
-    return Promise.all([ fsIn('playerStats','matchId',need), fsIn('attendance','matchId',need), fsIn('matchRoster','matchId',need) ])
-      .then(function(r){ fsMerge('stats',r[0]); fsMerge('attendance',r[1]); fsMerge('matchRoster',r[2]); need.forEach(function(id){ loaded[id]=1; }); });
+    var lite = FS._kidLite[cid] || (FS._kidLite[cid]={});
+    var todo = ids.filter(function(id){ return id && !loaded[id]; });
+    if(!todo.length) return;
+    var fresh = todo.filter(function(id){ return !lite[id]; });          // 아무것도 안 실린 경기
+    var rosterOnly = todo.filter(function(id){ return lite[id]; });      // 득점·출석은 이미 있음 → 명단만
+    var jobs = [
+      fresh.length ? fsIn('playerStats','matchId',fresh) : Promise.resolve([]),
+      fresh.length ? fsIn('attendance','matchId',fresh) : Promise.resolve([]),
+      fsIn('matchRoster','matchId',todo.slice())
+    ];
+    return Promise.all(jobs).then(function(r){
+      fsMerge('stats',r[0]); fsMerge('attendance',r[1]); fsMerge('matchRoster',r[2]);
+      todo.forEach(function(id){ loaded[id]=1; lite[id]=1; });
+      if(rosterOnly.length===0 && fresh.length===0) return;
+    });
   });
   FS._kidsQ[cid] = next.catch(function(){});
   return next;
