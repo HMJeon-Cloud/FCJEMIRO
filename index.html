@@ -763,12 +763,12 @@ var MAX_QUARTERS = 4;
 var DB = {
   joins: [],
   players: [
-    {id:'m1', num:1,  name:'김도현', size:'L',  birth:'1990-03-12', height:182, weight:78, region:'서울 강서', positions:['GK'], role:'임원', pw:''},
-    {id:'m2', num:4,  name:'이준서', size:'XL', birth:'1988-11-02', height:178, weight:80, region:'서울 양천', positions:['DF'], role:'팀원', pw:''},
-    {id:'m3', num:7,  name:'박민재', size:'M',  birth:'1993-06-25', height:174, weight:69, region:'경기 부천', positions:['MF','FW'], role:'팀원', pw:''},
-    {id:'m4', num:9,  name:'정우진', size:'L',  birth:'1991-01-18', height:180, weight:75, region:'서울 마포', positions:['FW'], role:'팀원', pw:''},
-    {id:'m5', num:10, name:'최시우', size:'M',  birth:'1995-09-30', height:172, weight:67, region:'인천 계양', positions:['MF'], role:'팀원', pw:''},
-    {id:'m6', num:11, name:'강태윤', size:'XL', birth:'1989-04-07', height:185, weight:83, region:'경기 김포', positions:['FW','MF'], role:'팀원', pw:''}
+    {id:'m1', num:1,  name:'김도현', size:'L',  birth:'1990-03-12', region:'서울 강서', positions:['GK'], role:'임원', pw:''},
+    {id:'m2', num:4,  name:'이준서', size:'XL', birth:'1988-11-02', region:'서울 양천', positions:['DF'], role:'팀원', pw:''},
+    {id:'m3', num:7,  name:'박민재', size:'M',  birth:'1993-06-25', region:'경기 부천', positions:['MF','FW'], role:'팀원', pw:''},
+    {id:'m4', num:9,  name:'정우진', size:'L',  birth:'1991-01-18', region:'서울 마포', positions:['FW'], role:'팀원', pw:''},
+    {id:'m5', num:10, name:'최시우', size:'M',  birth:'1995-09-30', region:'인천 계양', positions:['MF'], role:'팀원', pw:''},
+    {id:'m6', num:11, name:'강태윤', size:'XL', birth:'1989-04-07', region:'경기 김포', positions:['FW','MF'], role:'팀원', pw:''}
   ],
   matches: [
     {id:'g1', date:'2025-07-19', time:'15:00', opponent:'FC 라이온즈', venue:'매화 축구장', venueUrl:'https://www.google.com/maps?q=37.5665,126.9780', lat:37.5665, lng:126.9780},
@@ -845,7 +845,7 @@ var APPCHECK_SITE_KEY = '여기에_reCAPTCHA_사이트키_붙여넣기';
 var APP_NAME = '동네 축구왕';
 var APP_SUB = 'KICKTOWN';
 /* 현재 앱 버전 (version.json과 비교해 최신 아니면 자동 업데이트) */
-var APP_VERSION = '1.5';
+var APP_VERSION = '1.6';
 /* 동축_아이콘: 로그인/팀탭 대표 이미지 (256x256 남색 PNG, 여백 없음) */
 var APP_LOGO = 'logo.png';
 /* 동축_배경: 헤더 배경 이미지 (1000x545 JPEG). 비우면 다크 그라디언트로 fallback */
@@ -909,7 +909,7 @@ function linkAccountToClub_(cid, accId, name, pid){
     return {playerId:tgt.id, role:(tgt.role==='임원'?'임원':'팀원'), matched:true};
   }
   if(mine) return {playerId:mine.id, role:(mine.role==='임원'?'임원':'팀원'), already:true};
-  var np={id:uid_('mj'), clubId:cid, name:name, num:'', size:'', positions:[], birth:'', height:null, weight:null, region:'', role:'팀원', accountId:accId};
+  var np={id:uid_('mj'), clubId:cid, name:name, num:'', size:'', positions:[], birth:'', region:'', role:'팀원', accountId:accId};
   DB.players.push(np);
   return {playerId:np.id, role:'팀원', created:true};
 }
@@ -929,7 +929,7 @@ function mockHandler(fn, a){
     var membership=null;
     if(cd.owner && cd.owner.name){
       var opid='m'+Date.now();
-      DB.players.push({id:opid, clubId:cid, name:cd.owner.name, num:(cd.owner.num!=null&&cd.owner.num!==''?cd.owner.num:''), size:cd.owner.size||'L', positions:cd.owner.positions||[], birth:cd.owner.birth||'', height:cd.owner.height||null, weight:cd.owner.weight||null, region:cd.owner.region||'', role:'임원', ownerId:cd.ownerId||null, accountId:cd.ownerId||null});
+      DB.players.push({id:opid, clubId:cid, name:cd.owner.name, num:(cd.owner.num!=null&&cd.owner.num!==''?cd.owner.num:''), size:cd.owner.size||'L', positions:cd.owner.positions||[], birth:cd.owner.birth||'', region:cd.owner.region||'', role:'임원', ownerId:cd.ownerId||null, accountId:cd.ownerId||null});
       membership={clubId:cid, playerId:opid, role:'임원'};
     }
     return {clubs:mockHandler('getClubs',[]), membership:membership};
@@ -1692,8 +1692,6 @@ function playerCard(p){
   var age = p.birth ? (new Date().getFullYear() - parseInt(p.birth.slice(0,4))+1) : null;
   var sub = [];
   if(age) sub.push(age+'세');
-  if(p.height) sub.push(p.height+'cm');
-  if(p.weight) sub.push(p.weight+'kg');
   if(p.region) sub.push(p.region);
   var subHtml = sub.map(function(s,i){return (i>0?'<span class="dot">·</span>':'')+s;}).join(' ');
   var posHtml = (p.positions && p.positions.length)
@@ -2816,7 +2814,7 @@ function loadXLSX_(cb){
   document.head.appendChild(s);
 }
 var IMPORT_COLS = {
-  players: ['이름','등번호','역할','포지션','생년월일','키','몸무게','지역','사이즈'],
+  players: ['이름','등번호','역할','포지션','생년월일','지역','사이즈'],
   matches: ['날짜','시간','상대팀','장소','우리점수','상대점수','득점','도움']
 };
 function dlTemplate(type){
@@ -2913,8 +2911,8 @@ function rowsToPlayers_(rows, cid){
     var pos=s_(r['포지션']).split(/[,\s/]+/).filter(function(x){return x;});
     var role=s_(r['역할']); if(role!=='임원') role='팀원';
     out.push({ id:'m'+t+'_'+i, clubId:cid, name:name, num:n_(r['등번호']),
-      positions:pos, role:role, birth:d_(r['생년월일']), height:n_(r['키']),
-      weight:n_(r['몸무게']), region:s_(r['지역']), size:s_(r['사이즈']) });
+      positions:pos, role:role, birth:d_(r['생년월일']),
+      region:s_(r['지역']), size:s_(r['사이즈']) });
   }
   return out;
 }
@@ -3681,7 +3679,7 @@ function openWithdraw(){
    +   ownedWarn
    +   '<div style="background:var(--card-soft,rgba(0,0,0,.03));border:1px solid var(--line-strong);border-radius:10px;padding:11px 12px;margin-bottom:12px;">'
    +     '<div style="font-weight:800;font-size:13px;margin-bottom:6px;">삭제되는 정보</div>'
-   +     '<div style="font-size:12.5px;line-height:1.6;color:var(--steel);">로그인 계정 정보, 이름·생일·키·몸무게 등 개인 정보, 팀 소속 연결</div>'
+   +     '<div style="font-size:12.5px;line-height:1.6;color:var(--steel);">로그인 계정 정보, 이름·생일 등 개인 정보, 팀 소속 연결</div>'
    +     '<div style="font-weight:800;font-size:13px;margin:10px 0 6px;">남는 정보</div>'
    +     '<div style="font-size:12.5px;line-height:1.6;color:var(--steel);">팀의 경기 결과·득점·출석 기록은 팀 운영 이력을 위해 <b>이름 표기만 남고</b> 계정과의 연결은 끊어집니다.</div>'
    +   '</div>'
@@ -4138,7 +4136,7 @@ function saveClub(){
   if(isGuest()){ toast('게스트는 팀을 만들 수 없어요. 구단주로 로그인해 주세요.'); return; }
   var me=(state.players||[]).filter(function(p){return p.id===authId();})[0]||{};
   data.ownerId = (state.auth && state.auth.type==='owner') ? state.auth.ownerId : null;
-  data.owner = { name:state.auth.name, num:'', size:me.size||'L', positions:me.positions||[], birth:me.birth||'', height:me.height||null, weight:me.weight||null, region:me.region||'' };
+  data.owner = { name:state.auth.name, num:'', size:me.size||'L', positions:me.positions||[], birth:me.birth||'', region:me.region||'' };
   closeSheet(); toast('팀을 등록하는 중...');
   API.run('addClub', data).then(function(res){
     if(!res){ toast('저장 실패 · 새로고침'); return; }
@@ -4259,10 +4257,6 @@ function openPlayerForm(id){
    +     POS.map(function(ps){return '<div class="size-opt '+(state.formPositions.indexOf(ps[0])>=0?'sel':'')+'" data-pos="'+ps[0]+'" onclick="togglePos(\''+ps[0]+'\')">'+ps[0]+'</div>';}).join('')
    +   '</div></div>'
    +   '<div class="field"><label>생일</label><input id="f_birth" type="date" value="'+esc(p&&p.birth?p.birth:'')+'"></div>'
-   +   '<div class="grid2">'
-   +     '<div class="field"><label>키 (cm)</label><input id="f_height" type="number" inputmode="numeric" placeholder="175" value="'+esc(p&&p.height?p.height:'')+'"></div>'
-   +     '<div class="field"><label>몸무게 (kg)</label><input id="f_weight" type="number" inputmode="numeric" placeholder="70" value="'+esc(p&&p.weight?p.weight:'')+'"></div>'
-   +   '</div>'
    +   '<div class="field"><label>지역</label><input id="f_region" type="text" placeholder="서울 강서" value="'+esc(p&&p.region?p.region:'')+'"></div>'
    +   '<button class="btn-primary" onclick="savePlayer()">'+(id?'수정 완료':'등록하기')+'</button>'
    +   ((id && isAdmin()) ? ((p&&(p.accountId||p.ownerId))
@@ -4307,8 +4301,6 @@ function savePlayer(){
     size: state.formSize || '',
     positions: state.formPositions.slice(),
     birth: document.getElementById('f_birth').value,
-    height: parseInt(document.getElementById('f_height').value)||null,
-    weight: parseInt(document.getElementById('f_weight').value)||null,
     region: document.getElementById('f_region').value.trim()
   };
   // 권한: 등록은 임원만, 수정은 임원 또는 본인
