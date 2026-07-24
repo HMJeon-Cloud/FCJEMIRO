@@ -845,7 +845,7 @@ var APPCHECK_SITE_KEY = '6Lfmi2AtAAAAAP1R-1JlYz1ht1WuQWp2RS_tibpT';
 var APP_NAME = '동네 축구왕';
 var APP_SUB = 'KICKTOWN';
 /* 현재 앱 버전 (version.json과 비교해 최신 아니면 자동 업데이트) */
-var APP_VERSION = '1.1';
+var APP_VERSION = '1.2';
 /* 동축_아이콘: 로그인/팀탭 대표 이미지 (256x256 남색 PNG, 여백 없음) */
 var APP_LOGO = 'logo.png';
 /* 동축_배경: 헤더 배경 이미지 (1000x545 JPEG). 비우면 다크 그라디언트로 fallback */
@@ -5436,7 +5436,9 @@ function doKakaoAuth(){
   var base = kakaoBackendBase_();
   if(!base){ toast('카카오 로그인 준비 중입니다 (백엔드 URL 설정 필요)'); return; }
   authBtnBusy_(true);
-  // 백엔드가 카카오 OAuth로 리다이렉트 → 콜백 후 앱으로 #ks=... 붙여 복귀
+  // 네이티브 앱: 인앱 브라우저로 열고, 백엔드가 kicktown:// 스킴으로 되돌려 준다
+  if(window.KTN && KTN.openKakaoLogin){ KTN.openKakaoLogin(base + '/api/kakao/login?native=1'); return; }
+  // 웹: 백엔드가 카카오 OAuth로 리다이렉트 → 콜백 후 앱으로 #ks=... 붙여 복귀
   location.href = base + '/api/kakao/login';
 }
 /* 카카오 로그인 복귀 처리: 백엔드가 앱 URL 해시에 실어준 서명 티켓(ks)을 백엔드에 되물어 프로필 획득 */
@@ -5446,6 +5448,11 @@ function handleKakaoReturn_(){
   if(!m) return false;
   var ks = decodeURIComponent(m[1]);
   try{ history.replaceState(null, '', location.pathname + location.search); }catch(e){ location.hash=''; }
+  kakaoExchange_(ks);
+  return true;
+}
+/* 서명 티켓(ks)을 백엔드에 되물어 로그인 완료 — 웹/네이티브 공용 */
+function kakaoExchange_(ks){
   var base = kakaoBackendBase_();
   toast('카카오 로그인 확인 중...');
   fetch(base + '/api/kakao/session', {
@@ -5460,7 +5467,6 @@ function handleKakaoReturn_(){
       else { toast('로그인 처리 실패: '+((r&&r.error)||'알 수 없음')); applyAppHeader(); showLogin(); hideSplash_(); }
     });
   }).catch(function(e){ try{ console.error('kakao return 오류:', e); }catch(_){} toast('카카오 로그인 오류: '+((e&&e.message)||'네트워크')); applyAppHeader(); showLogin(); hideSplash_(); });
-  return true;
 }
 function copyInviteLink(){
   var cid = state.activeClubId; if(!cid){ toast('먼저 팀을 선택하세요'); return; }
@@ -6489,6 +6495,39 @@ function loadClubData_(){
     }catch(e){}
   };
 
+  /* ---------- 8-1. 카카오 로그인 (인앱 브라우저 + 딥링크 복귀) ----------
+   * 앱은 capacitor://localhost 에서 실행되므로 웹처럼 location.href 로
+   * 외부 OAuth 페이지에 다녀올 수 없다. 인앱 브라우저로 열고,
+   * 백엔드가 kicktown://auth#ks=... 로 되돌려 주면 그것을 받아 처리한다. */
+  KTN.openKakaoLogin = function(url){
+    if(P.Browser && P.Browser.open){
+      P.Browser.open({url:url, presentationStyle:'popover'}).catch(function(){
+        try{ window.open(url, '_blank'); }catch(e){}
+      });
+    } else {
+      try{ window.open(url, '_blank'); }catch(e){}
+    }
+  };
+  function closeBrowser(){ try{ if(P.Browser && P.Browser.close) P.Browser.close(); }catch(e){} }
+  function handleDeepLink(url){
+    if(!url) return;
+    var m = String(url).match(/[#&?]ks=([^&]+)/);
+    if(!m) return;
+    closeBrowser();
+    var ks = decodeURIComponent(m[1]);
+    try{ if(window.kakaoExchange_) kakaoExchange_(ks); }catch(e){}
+  }
+  function bindDeepLink(){
+    if(!P.App) return;
+    try{
+      P.App.addListener('appUrlOpen', function(ev){ handleDeepLink(ev && ev.url); });
+      // 앱이 종료된 상태에서 링크로 실행된 경우
+      if(P.App.getLaunchUrl){
+        P.App.getLaunchUrl().then(function(r){ if(r && r.url) handleDeepLink(r.url); }).catch(function(){});
+      }
+    }catch(e){}
+  }
+
   /* ---------- 9. 앱 생명주기 ---------- */
   function bindApp(){
     if(!P.App) return;
@@ -6515,6 +6554,7 @@ function loadClubData_(){
     bindApp();
     patchGeolocation();
     patchShare();
+    bindDeepLink();
     disableWebUpdate();
     KTN.lockIfEnabled();
     log('네이티브 브리지 준비 완료 ·', KTN.platform);
